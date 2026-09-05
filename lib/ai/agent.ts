@@ -1,6 +1,6 @@
 import { getProvider } from "./provider";
 import { tools, getToolByName } from "./tools";
-import type { Message, ProviderConfig } from "./types";
+import type { Message, ProviderConfig, Usage } from "./types";
 
 export type AgentStep = {
   type: "text" | "tool";
@@ -19,6 +19,10 @@ export type AgentResult = {
   answer: string;
   /** The reasoning/action trail, so the UI can show what the agent did. */
   steps: AgentStep[];
+  /** Total token usage across every model turn in this request. */
+  usage: Usage;
+  /** How many model turns (API round-trips) the request took. */
+  turns: number;
 };
 
 const SYSTEM_PROMPT = `You are the assistant inside "Next-Gen CRM", an AI-native CRM for a non-profit organization.
@@ -51,9 +55,17 @@ export async function runAgent(
   const messages: Message[] = [{ role: "user", content: userIntent }];
   const steps: AgentStep[] = [];
   let answer = "";
+  const usage: Usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+  let turns = 0;
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     const res = await provider.complete(SYSTEM_PROMPT, messages, tools);
+    turns++;
+    if (res.usage) {
+      usage.inputTokens += res.usage.inputTokens;
+      usage.outputTokens += res.usage.outputTokens;
+      usage.totalTokens += res.usage.totalTokens;
+    }
 
     if (res.text) {
       answer = res.text;
@@ -102,5 +114,5 @@ export async function runAgent(
       "I worked through that but didn't produce a final summary. Check the steps below for what happened.";
   }
 
-  return { provider: provider.name, model: provider.model, answer, steps };
+  return { provider: provider.name, model: provider.model, answer, steps, usage, turns };
 }

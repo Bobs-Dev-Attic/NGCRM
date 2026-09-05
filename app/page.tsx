@@ -11,11 +11,15 @@ type AgentStep = {
   result?: unknown;
 };
 
+type Usage = { inputTokens: number; outputTokens: number; totalTokens: number };
+
 type AgentResult = {
   provider: string;
   model: string;
   answer: string;
   steps: AgentStep[];
+  usage?: Usage;
+  turns?: number;
 };
 
 const EXAMPLES = [
@@ -135,11 +139,24 @@ export default function Home() {
           <section style={styles.result}>
             <div style={styles.answer}>{result.answer}</div>
 
+            <div style={styles.meta}>
+              {result.provider}/{result.model}
+              {result.usage && result.usage.totalTokens > 0 && (
+                <>
+                  {" · "}
+                  <span title={`${result.usage.inputTokens.toLocaleString()} in · ${result.usage.outputTokens.toLocaleString()} out`}>
+                    {result.usage.totalTokens.toLocaleString()} tokens
+                    {" "}({result.usage.inputTokens.toLocaleString()} in · {result.usage.outputTokens.toLocaleString()} out)
+                  </span>
+                </>
+              )}
+              {result.turns ? ` · ${result.turns} model ${result.turns === 1 ? "turn" : "turns"}` : ""}
+            </div>
+
             {result.steps.some((s) => s.type === "tool") && (
               <details style={styles.details}>
                 <summary style={styles.summary}>
-                  What the agent did ({result.steps.filter((s) => s.type === "tool").length} actions
-                  · {result.provider}/{result.model})
+                  What the agent did ({result.steps.filter((s) => s.type === "tool").length} actions)
                 </summary>
                 <div style={styles.steps}>
                   {result.steps.map((s, i) =>
@@ -262,6 +279,7 @@ const styles: Record<string, React.CSSProperties> = {
     whiteSpace: "pre-wrap",
     boxShadow: "var(--shadow)",
   },
+  meta: { marginTop: 10, fontSize: 12.5, color: "var(--muted)" },
   details: { marginTop: 14 },
   summary: { cursor: "pointer", fontSize: 13, color: "var(--muted)" },
   steps: { marginTop: 12, display: "flex", flexDirection: "column", gap: 12 },
