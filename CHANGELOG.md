@@ -7,6 +7,13 @@ exact Git commit (on Vercel deploys).
 This project uses loose semantic versioning while pre-1.0: minor bumps for
 features, patch bumps for fixes.
 
+## 0.9.1 — Health/diagnostics endpoint
+- `GET /api/health` reports the database the deployed app is connected to
+  (host + name only, no credentials), whether core tables exist / the schema is
+  migrated, and whether `DATABASE_URL` / `AUTH_SECRET` are set. Helps catch a
+  local-vs-Vercel `DATABASE_URL` (or Neon branch) mismatch behind
+  "relation ... does not exist".
+
 ## 0.9.0 — On-screen version + changelog
 - Show the app version (and commit SHA on Vercel) in a bottom-right badge on
   every page.
