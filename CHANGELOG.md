@@ -7,6 +7,17 @@ exact Git commit (on Vercel deploys).
 This project uses loose semantic versioning while pre-1.0: minor bumps for
 features, patch bumps for fixes.
 
+## 0.13.0 — Contacts/households dashboard
+- New `/dashboard` page (linked from the home topbar, gated by middleware):
+  at-a-glance tiles for contacts, households, donors, total raised, and
+  campaigns, plus a contacts-by-tag bar chart and top-households / top-donors /
+  recent-contacts lists.
+- `GET /api/dashboard` returns the aggregates, auth-gated and **RLS-scoped** —
+  a volunteer's dashboard reflects only the records they're allowed to see
+  (e.g. restricted board/major donors are excluded).
+- Seed now loads a handful of demo donations so "Total raised" / "Top donors"
+  populate; re-run `db:seed` to refresh. No migration.
+
 ## 0.12.0 — Campaign send step (with approval gate)
 - `approve_campaign_draft` marks a draft approved (required before sending).
 - `send_campaign` sends an approved draft to its audience — a real outbound

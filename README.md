@@ -31,6 +31,12 @@ Agent loop  (lib/ai/agent.ts)
 - **Database** — Neon Postgres (`db/schema.sql`): contacts, households,
   campaigns, donations, goals, tasks, `request_history`, and `orgs`.
   `db:migrate` is idempotent — re-run it after pulling schema changes.
+- **Dashboard** — `/dashboard` gives an at-a-glance view: tiles for contacts,
+  households, donors, total raised and campaigns, plus a contacts-by-tag chart
+  and top-households / top-donors / recent-contacts lists. It reads
+  `GET /api/dashboard`, which is auth-gated and **RLS-scoped**, so each user
+  only sees totals for records they're allowed to (e.g. a volunteer's numbers
+  exclude restricted board/major donors).
 - **Admin** — admins get a `/admin` user-management page: list users, add users
   with a role, change roles, and remove users — scoped to their org and enforced
   server-side (`app/api/admin/users`). The last admin can't be demoted or removed.
