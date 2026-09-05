@@ -32,12 +32,21 @@ export type Message =
   | { role: "assistant"; content: string; toolCalls?: ToolCall[] }
   | { role: "tool"; toolCallId: string; name: string; content: string };
 
+/** Normalized token usage for one model turn. */
+export type Usage = {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+};
+
 /** What a provider returns after one model turn. */
 export type ProviderResponse = {
   /** Any natural-language text the model produced this turn. */
   text: string;
   /** Tool calls the model requested (empty when it's done). */
   toolCalls: ToolCall[];
+  /** Token usage for this turn, when the provider reports it. */
+  usage?: Usage;
 };
 
 /**
