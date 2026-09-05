@@ -96,3 +96,19 @@ CREATE TABLE IF NOT EXISTS request_history (
 );
 
 CREATE INDEX IF NOT EXISTS idx_history_created ON request_history (created_at DESC);
+
+-- Campaign drafts: an email the agent composed for a campaign, targeting a
+-- segment. Kept as a reviewable draft — NGCRM does not send email itself.
+CREATE TABLE IF NOT EXISTS campaign_drafts (
+  id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  campaign_id     BIGINT REFERENCES campaigns(id) ON DELETE CASCADE,
+  subject         TEXT NOT NULL,
+  body            TEXT NOT NULL,
+  audience_desc   TEXT,                           -- human description of the segment
+  audience_filter JSONB,                          -- the filter used to size the audience
+  recipient_count INT NOT NULL DEFAULT 0,
+  status          TEXT NOT NULL DEFAULT 'draft',  -- draft | approved
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_campaign_drafts_campaign ON campaign_drafts (campaign_id);

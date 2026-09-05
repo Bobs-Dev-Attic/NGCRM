@@ -42,7 +42,14 @@ Guidelines:
 - Deduping: contacts sharing an email are safe to merge automatically (auto_merge_duplicate_contacts).
   For name-only matches, they may be different people — list them and ask the user to confirm before
   calling merge_contacts. When the user says which to merge, call merge_contacts with those ids.
-- Keep your final answer short, warm, and specific about what you did or found.`;
+- Email campaigns: to "prepare/build an email campaign", (1) find or create the campaign
+  (create_campaign, or pass campaign_name to save_campaign_draft), (2) choose the audience with
+  preview_audience (e.g. tag "prospect" or "donor" for potential donors), (3) WRITE the subject and
+  body yourself — warm, specific, non-profit-appropriate, with a clear ask and a placeholder like
+  {first_name} for personalization — then (4) call save_campaign_draft. Then show the subject and
+  body in your answer and state the recipient count. You do NOT send email; you prepare a draft to review.
+- Keep your final answer short, warm, and specific about what you did or found. When you drafted a
+  campaign email, include the full subject and body in your answer so the user can review it.`;
 
 const MAX_TURNS = 6;
 

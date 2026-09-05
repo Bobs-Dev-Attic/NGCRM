@@ -135,6 +135,78 @@ async function mergeContactGroup(ids: number[], keepId?: number): Promise<MergeR
   return { merged_into: keep, removed: loserIds, survivor: { id: keep, ...m } };
 }
 
+// --- campaign builder helpers ---
+
+function toInt(v: unknown): number | null {
+  const n = Number(v);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+type AudienceFilter = {
+  tag?: string | null;
+  city?: string | null;
+  state?: string | null;
+  donor_only?: boolean;
+};
+
+function normalizeAudience(input: Record<string, unknown> | undefined): AudienceFilter {
+  const f = input ?? {};
+  return {
+    tag: str(f.tag),
+    city: str(f.city),
+    state: str(f.state),
+    donor_only: f.donor_only === true,
+  };
+}
+
+/** Count and sample the contacts that match an audience filter. */
+async function queryAudience(f: AudienceFilter) {
+  const sql = getSql();
+  const donorOnly = f.donor_only === true ? true : null;
+  const where = sql`
+    (${f.tag}::text IS NULL OR ${f.tag} = ANY(c.tags))
+    AND (${f.city}::text IS NULL OR lower(c.city) = lower(${f.city}))
+    AND (${f.state}::text IS NULL OR lower(c.state) = lower(${f.state}))
+    AND (${donorOnly}::bool IS NOT TRUE
+         OR EXISTS (SELECT 1 FROM donations d WHERE d.contact_id = c.id))
+  `;
+  const [{ n }] = (await sql`SELECT count(*)::int AS n FROM contacts c WHERE ${where}`) as {
+    n: number;
+  }[];
+  const sample = await sql`
+    SELECT id, first_name, last_name, email
+    FROM contacts c WHERE ${where}
+    ORDER BY last_name NULLS LAST LIMIT 10
+  `;
+  return { count: n, sample };
+}
+
+/** Resolve a campaign by id, or by name (creating it if missing). */
+async function resolveCampaign(
+  campaignId: unknown,
+  campaignName: unknown
+): Promise<{ id: number; name: string } | null> {
+  const sql = getSql();
+  const id = toInt(campaignId);
+  if (id) {
+    const [row] = (await sql`SELECT id, name FROM campaigns WHERE id = ${id}`) as {
+      id: number;
+      name: string;
+    }[];
+    return row ? { id: Number(row.id), name: row.name } : null;
+  }
+  const name = str(campaignName);
+  if (!name) return null;
+  const [existing] = (await sql`
+    SELECT id, name FROM campaigns WHERE lower(name) = lower(${name}) LIMIT 1
+  `) as { id: number; name: string }[];
+  if (existing) return { id: Number(existing.id), name: existing.name };
+  const [created] = (await sql`
+    INSERT INTO campaigns (name, status) VALUES (${name}, 'draft') RETURNING id, name
+  `) as { id: number; name: string }[];
+  return { id: Number(created.id), name: created.name };
+}
+
 export const tools: AgentTool[] = [
   {
     name: "count_contacts",
@@ -439,6 +511,153 @@ export const tools: AgentTool[] = [
         LIMIT ${limit}
       `;
       return { recent_requests: rows };
+    },
+  },
+
+  // ---- Campaign builder ----
+
+  {
+    name: "create_campaign",
+    description:
+      "Create a fundraising campaign / event (e.g. a spring gala). Returns the campaign id.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        event_date: { type: "string", description: "ISO date, e.g. 2026-04-18" },
+        goal_amount: { type: "number" },
+      },
+      required: ["name"],
+    },
+    async execute(input) {
+      const sql = getSql();
+      const name = str(input.name);
+      if (!name) return { error: "name is required" };
+      const eventDate = str(input.event_date);
+      const goal = Number(input.goal_amount) || null;
+      const [row] = await sql`
+        INSERT INTO campaigns (name, event_date, goal_amount, status)
+        VALUES (${name}, ${eventDate}, ${goal}, 'draft')
+        RETURNING id, name, event_date, goal_amount, status
+      `;
+      return { created_campaign: row };
+    },
+  },
+
+  {
+    name: "list_campaigns",
+    description: "List fundraising campaigns and their status.",
+    inputSchema: { type: "object", properties: {} },
+    async execute() {
+      const sql = getSql();
+      const rows = await sql`
+        SELECT id, name, event_date, goal_amount, status, created_at
+        FROM campaigns ORDER BY created_at DESC LIMIT 50
+      `;
+      return { campaigns: rows };
+    },
+  },
+
+  {
+    name: "preview_audience",
+    description:
+      "Size and preview the segment of contacts an email campaign would target, by tag (e.g. donor, prospect, volunteer), city/state, and/or whether they've donated before. Use this to choose who a campaign should reach before drafting.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tag: { type: "string", description: "Only contacts carrying this tag" },
+        city: { type: "string" },
+        state: { type: "string" },
+        donor_only: { type: "boolean", description: "Only contacts with at least one donation" },
+      },
+    },
+    async execute(input) {
+      const f = normalizeAudience(input);
+      const { count, sample } = await queryAudience(f);
+      return { filter: f, recipient_count: count, sample };
+    },
+  },
+
+  {
+    name: "save_campaign_draft",
+    description:
+      "Save an email draft you composed for a campaign, targeting an audience segment. Provide the subject and body you wrote (personalize the copy for a non-profit's donors). Identify the campaign by campaign_id, or by campaign_name (it will be found or created). This saves a REVIEWABLE draft — it does not send email.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        campaign_id: { type: "number" },
+        campaign_name: { type: "string", description: "Used if campaign_id is not given" },
+        subject: { type: "string" },
+        body: { type: "string" },
+        audience_desc: { type: "string", description: "Short description of who this targets" },
+        audience_filter: {
+          type: "object",
+          description: "The segment filter (tag, city, state, donor_only) used to size recipients",
+          properties: {
+            tag: { type: "string" },
+            city: { type: "string" },
+            state: { type: "string" },
+            donor_only: { type: "boolean" },
+          },
+        },
+      },
+      required: ["subject", "body"],
+    },
+    async execute(input) {
+      const sql = getSql();
+      const subject = str(input.subject);
+      const body = str(input.body);
+      if (!subject || !body) return { error: "subject and body are required" };
+
+      const campaign = await resolveCampaign(input.campaign_id, input.campaign_name);
+      if (!campaign) {
+        return { error: "Provide a valid campaign_id or a campaign_name to save the draft under." };
+      }
+
+      const filter = normalizeAudience(
+        input.audience_filter as Record<string, unknown> | undefined
+      );
+      const { count } = await queryAudience(filter);
+      const audienceDesc = str(input.audience_desc);
+
+      const [row] = await sql`
+        INSERT INTO campaign_drafts
+          (campaign_id, subject, body, audience_desc, audience_filter, recipient_count, status)
+        VALUES
+          (${campaign.id}, ${subject}, ${body}, ${audienceDesc},
+           ${JSON.stringify(filter)}::jsonb, ${count}, 'draft')
+        RETURNING id, campaign_id, subject, recipient_count, status, created_at
+      `;
+      return {
+        saved_draft: row,
+        campaign: campaign.name,
+        recipient_count: count,
+        note: "Draft saved for review. NGCRM does not send email; export or hand off to your mail tool to send.",
+      };
+    },
+  },
+
+  {
+    name: "list_campaign_drafts",
+    description: "List saved campaign email drafts (optionally for one campaign).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        campaign_id: { type: "number", description: "Filter to one campaign" },
+      },
+    },
+    async execute(input) {
+      const sql = getSql();
+      const id = toInt(input.campaign_id);
+      const rows = await sql`
+        SELECT d.id, d.campaign_id, c.name AS campaign_name, d.subject, d.body,
+               d.audience_desc, d.recipient_count, d.status, d.created_at
+        FROM campaign_drafts d
+        JOIN campaigns c ON c.id = d.campaign_id
+        WHERE (${id}::bigint IS NULL OR d.campaign_id = ${id})
+        ORDER BY d.created_at DESC LIMIT 25
+      `;
+      return { drafts: rows };
     },
   },
 ];

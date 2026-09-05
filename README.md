@@ -110,6 +110,10 @@ Vercel project settings. The agent route runs on the Node.js runtime.
 
 - Auto-build households from relative clusters (duplicate detection + merge now shipped:
   `find_duplicate_contacts`, `merge_contacts`, `auto_merge_duplicate_contacts`)
+- Campaign builder shipped: `create_campaign`, `list_campaigns`, `preview_audience`,
+  `save_campaign_draft`, `list_campaign_drafts` — the agent segments an audience and
+  drafts a reviewable email (sending is intentionally out of scope). Wiring an email
+  provider to actually send is a natural follow-up.
 - Full campaign builder (segment → draft → review → send) with email provider
 - Donations analytics and giving history per household
 - Streaming agent responses; task/goal tracking surfaced in the UI
