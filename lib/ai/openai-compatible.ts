@@ -68,6 +68,9 @@ export class OpenAICompatibleProvider implements LLMProvider {
       id: tc.id,
       name: tc.function.name,
       input: safeParse(tc.function.arguments),
+      // Gemini 3 returns a thought_signature here that must be echoed back on
+      // the next turn; other providers leave it undefined.
+      extra: tc.extra_content,
     }));
     return { text: msg?.content ?? "", toolCalls };
   }
@@ -91,6 +94,9 @@ function toOpenAIMessages(system: string, messages: Message[]) {
                   name: tc.name,
                   arguments: JSON.stringify(tc.input),
                 },
+                // Echo Gemini's thought_signature (and any other opaque data)
+                // back verbatim, which Gemini 3 requires for tool calls.
+                ...(tc.extra ? { extra_content: tc.extra } : {}),
               })),
             }
           : {}),
@@ -121,6 +127,7 @@ type OpenAIChatResponse = {
       tool_calls?: {
         id: string;
         function: { name: string; arguments: string };
+        extra_content?: unknown;
       }[];
     };
   }[];
