@@ -11,7 +11,12 @@ import { getPreset } from "@/lib/providers";
  * `preset` is a client-only convenience (which provider card is selected); the
  * server's route ignores it and reads only the ProviderConfig fields.
  */
-export type ClientSettings = ProviderConfig & { preset?: string };
+export type ClientSettings = ProviderConfig & {
+  preset?: string;
+  /** Display toggles (client-only; ignored by the server). */
+  showTokens?: boolean;
+  showCost?: boolean;
+};
 
 const KEY = "ngcrm.settings.v1";
 
@@ -22,6 +27,8 @@ export const DEFAULT_SETTINGS: ClientSettings = {
   apiKey: "",
   baseUrl: "",
   workspaceId: "",
+  showTokens: true,
+  showCost: true,
 };
 
 /**

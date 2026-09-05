@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { loadSettings, hasUsableKey } from "@/lib/settings";
+import { estimateCostUSD, formatUSD } from "@/lib/pricing";
+import { Logo } from "@/components/Logo";
 
 type AgentStep = {
   type: "text" | "tool";
@@ -36,9 +38,12 @@ export default function Home() {
   const [result, setResult] = useState<AgentResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [keyConfigured, setKeyConfigured] = useState(true);
+  const [display, setDisplay] = useState({ showTokens: true, showCost: true });
 
   useEffect(() => {
-    setKeyConfigured(hasUsableKey(loadSettings()));
+    const s = loadSettings();
+    setKeyConfigured(hasUsableKey(s));
+    setDisplay({ showTokens: s.showTokens ?? true, showCost: s.showCost ?? true });
   }, []);
 
   async function submit(text: string) {
@@ -47,11 +52,13 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setResult(null);
+    const settings = loadSettings();
+    setDisplay({ showTokens: settings.showTokens ?? true, showCost: settings.showCost ?? true });
     try {
       const res = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ intent: value, config: loadSettings() }),
+        body: JSON.stringify({ intent: value, config: settings }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Request failed");
@@ -73,6 +80,9 @@ export default function Home() {
         </div>
 
         <header style={styles.header}>
+          <div style={styles.logoRow}>
+            <Logo size={40} />
+          </div>
           <div style={styles.logo}>Next-Gen CRM</div>
           <h1 style={styles.prompt}>What do you need to get done today?</h1>
         </header>
@@ -141,7 +151,7 @@ export default function Home() {
 
             <div style={styles.meta}>
               {result.provider}/{result.model}
-              {result.usage && result.usage.totalTokens > 0 && (
+              {display.showTokens && result.usage && result.usage.totalTokens > 0 && (
                 <>
                   {" · "}
                   <span title={`${result.usage.inputTokens.toLocaleString()} in · ${result.usage.outputTokens.toLocaleString()} out`}>
@@ -150,6 +160,12 @@ export default function Home() {
                   </span>
                 </>
               )}
+              {display.showCost && result.usage && result.usage.totalTokens > 0 && (() => {
+                const cost = estimateCostUSD(result.model, result.usage);
+                return cost === null
+                  ? " · cost n/a"
+                  : ` · ~${formatUSD(cost)} est.`;
+              })()}
               {result.turns ? ` · ${result.turns} model ${result.turns === 1 ? "turn" : "turns"}` : ""}
             </div>
 
@@ -199,6 +215,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   bannerLink: { color: "var(--accent)", textDecoration: "none", fontWeight: 600 },
   header: { textAlign: "center", marginBottom: 28 },
+  logoRow: { display: "flex", justifyContent: "center", marginBottom: 14 },
   logo: {
     fontSize: 13,
     letterSpacing: "0.14em",

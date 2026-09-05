@@ -164,6 +164,26 @@ export default function SettingsPage() {
             </label>
           )}
 
+          <div style={styles.divider} />
+
+          <div style={styles.fieldLabel}>Display</div>
+          <label style={styles.toggle}>
+            <input
+              type="checkbox"
+              checked={s.showTokens ?? true}
+              onChange={(e) => update("showTokens", e.target.checked)}
+            />
+            Show token counts under each answer
+          </label>
+          <label style={styles.toggle}>
+            <input
+              type="checkbox"
+              checked={s.showCost ?? true}
+              onChange={(e) => update("showCost", e.target.checked)}
+            />
+            Show estimated dollar cost under each answer
+          </label>
+
           <div style={styles.actions}>
             <button type="button" style={styles.save} onClick={onSave}>
               {saved ? "Saved ✓" : "Save"}
@@ -270,7 +290,17 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     cursor: "pointer",
   },
-  actions: { display: "flex", gap: 10, marginTop: 4 },
+  divider: { height: 1, background: "var(--border)", margin: "4px 0 18px" },
+  toggle: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: 13.5,
+    color: "var(--fg)",
+    marginBottom: 12,
+    cursor: "pointer",
+  },
+  actions: { display: "flex", gap: 10, marginTop: 8 },
   save: {
     background: "var(--accent)",
     color: "var(--accent-fg)",
