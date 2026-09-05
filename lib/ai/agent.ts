@@ -54,7 +54,12 @@ Guidelines:
   preview_audience (e.g. tag "prospect" or "donor" for potential donors), (3) WRITE the subject and
   body yourself — warm, specific, non-profit-appropriate, with a clear ask and a placeholder like
   {first_name} for personalization — then (4) call save_campaign_draft. Then show the subject and
-  body in your answer and state the recipient count. You do NOT send email; you prepare a draft to review.
+  body in your answer and state the recipient count.
+- Sending a campaign is a real, irreversible outbound action. NEVER send on your own initiative.
+  The flow is: save_campaign_draft -> the user reviews -> approve_campaign_draft (only when the
+  user approves) -> send_campaign (only when the user explicitly says to send this draft).
+  send_campaign defaults to a DRY RUN (emails no one); use mode:"live" ONLY if the user explicitly
+  asks to send for real. Always state whether a send was a dry run or live, and the counts.
 - Keep your final answer short, warm, and specific about what you did or found. When you drafted a
   campaign email, include the full subject and body in your answer so the user can review it.`;
 
