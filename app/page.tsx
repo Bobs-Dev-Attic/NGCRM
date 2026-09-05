@@ -37,7 +37,7 @@ type HistoryItem = {
 };
 
 const EXAMPLES = [
-  "Set a goal for this morning: prepare an email campaign for potential donors for our spring gala",
+  "Draft an email campaign for our Spring Gala targeting potential donors",
   "How many contacts do we have?",
   "Import these contacts: Maria Chang, maria@example.org; David Chang, david@example.org",
   "Find possible duplicate contacts",
