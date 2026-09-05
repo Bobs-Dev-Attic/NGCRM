@@ -447,6 +447,80 @@ export const tools: AgentTool[] = [
   },
 
   {
+    name: "auto_build_households",
+    description:
+      "Automatically group contacts into households: for each cluster sharing a last name and a postal code (or city), create a household ('The <Last> Household') and assign the members. Contacts already in a household keep it; a cluster with an existing household absorbs its unassigned members. Idempotent — re-running won't create duplicates. Preview first with find_possible_relatives if the user wants to review.",
+    inputSchema: { type: "object", properties: {} },
+    async execute() {
+      const sql = getSql();
+      const clusters = (await sql`
+        SELECT max(last_name) AS display_last,
+               array_agg(id ORDER BY id) AS ids,
+               array_agg(household_id) AS hids
+        FROM contacts
+        WHERE last_name IS NOT NULL AND last_name <> ''
+          AND (postal_code IS NOT NULL OR city IS NOT NULL)
+        GROUP BY lower(last_name), coalesce(lower(postal_code), lower(city))
+        HAVING count(*) > 1
+      `) as { display_last: string; ids: unknown[]; hids: unknown[] }[];
+
+      let created = 0;
+      let assigned = 0;
+      const details: { household_id: number; name: string; assigned: number }[] = [];
+
+      for (const c of clusters) {
+        const ids = toIntArray(c.ids);
+        // Reuse an existing household in the cluster if any; else create one.
+        let target: number | null = null;
+        for (const h of c.hids) {
+          if (h != null) {
+            target = Number(h);
+            break;
+          }
+        }
+        const name = `The ${c.display_last} Household`;
+        if (target == null) {
+          const [row] = (await sql`
+            INSERT INTO households (name) VALUES (${name}) RETURNING id
+          `) as { id: number }[];
+          target = Number(row.id);
+          created++;
+        }
+        const updated = await sql`
+          UPDATE contacts SET household_id = ${target}, updated_at = now()
+          WHERE id = ANY(${ids}::bigint[]) AND household_id IS DISTINCT FROM ${target}
+          RETURNING id
+        `;
+        assigned += updated.length;
+        details.push({ household_id: target, name, assigned: updated.length });
+      }
+
+      return { clusters: clusters.length, households_created: created, contacts_assigned: assigned, details };
+    },
+  },
+
+  {
+    name: "list_households",
+    description: "List households and their members.",
+    inputSchema: { type: "object", properties: {} },
+    async execute() {
+      const sql = getSql();
+      const rows = await sql`
+        SELECT h.id, h.name,
+               count(c.id)::int AS members,
+               array_agg(coalesce(c.first_name,'') || ' ' || coalesce(c.last_name,''))
+                 FILTER (WHERE c.id IS NOT NULL) AS member_names
+        FROM households h
+        LEFT JOIN contacts c ON c.household_id = h.id
+        GROUP BY h.id, h.name
+        ORDER BY h.id
+        LIMIT 100
+      `;
+      return { households: rows };
+    },
+  },
+
+  {
     name: "create_goal",
     description:
       "Record a goal the user wants to accomplish (e.g. for this morning or afternoon).",

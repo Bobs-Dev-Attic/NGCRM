@@ -7,6 +7,13 @@ exact Git commit (on Vercel deploys).
 This project uses loose semantic versioning while pre-1.0: minor bumps for
 features, patch bumps for fixes.
 
+## 0.10.0 — Auto-build households
+- `auto_build_households` agent tool: groups contacts sharing a last name +
+  locality into households ("The <Last> Household") and assigns members;
+  idempotent, org-scoped under RLS. `list_households` lists them with members.
+- `households` table gets `org_id` + RLS (org isolation), consistent with the
+  other tenant tables. **Re-run `db:migrate`.**
+
 ## 0.9.1 — Health/diagnostics endpoint
 - `GET /api/health` reports the database the deployed app is connected to
   (host + name only, no credentials), whether core tables exist / the schema is

@@ -42,6 +42,9 @@ Guidelines:
 - Deduping: contacts sharing an email are safe to merge automatically (auto_merge_duplicate_contacts).
   For name-only matches, they may be different people — list them and ask the user to confirm before
   calling merge_contacts. When the user says which to merge, call merge_contacts with those ids.
+- Households: "build/auto-build households" or "group families" -> call auto_build_households
+  (it groups contacts sharing a last name + locality into households). Show the result and
+  offer find_possible_relatives first if the user wants to preview before committing.
 - Email campaigns: to "prepare/build an email campaign", (1) find or create the campaign
   (create_campaign, or pass campaign_name to save_campaign_draft), (2) choose the audience with
   preview_audience (e.g. tag "prospect" or "donor" for potential donors), (3) WRITE the subject and
