@@ -8,7 +8,9 @@ import {
   saveSettings,
   clearSettings,
   DEFAULT_SETTINGS,
+  makeEntry,
   type ClientSettings,
+  type ProviderEntry,
 } from "@/lib/settings";
 import { PROVIDER_PRESETS, getPreset } from "@/lib/providers";
 import {
@@ -37,7 +39,7 @@ export default function SettingsPage() {
   // Provider settings
   const [s, setS] = useState<ClientSettings>(DEFAULT_SETTINGS);
   const [saved, setSaved] = useState(false);
-  const [showKey, setShowKey] = useState(false);
+  const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
 
   // Profile
   const [profile, setProfile] = useState<WorkingStyle | null>(null);
@@ -79,25 +81,40 @@ export default function SettingsPage() {
     router.replace("/login");
   }
 
-  // --- provider handlers ---
-  const preset = getPreset(s.preset);
-  const isAnthropic = preset.transport === "anthropic";
-
-  function update<K extends keyof ClientSettings>(k: K, v: ClientSettings[K]) {
-    setS((prev) => ({ ...prev, [k]: v }));
+  // --- provider chain handlers (operate on s.providers) ---
+  function setProviders(next: ProviderEntry[]) {
+    setS((prev) => ({ ...prev, providers: next }));
     setSaved(false);
   }
-  function choosePreset(id: string) {
-    const p = getPreset(id);
-    setS((prev) => ({
-      ...prev,
+  function updateEntry(id: string, patch: Partial<ProviderEntry>) {
+    setProviders(s.providers.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+  }
+  function choosePresetFor(id: string, presetId: string) {
+    const p = getPreset(presetId);
+    updateEntry(id, {
       preset: p.id,
       provider: p.transport,
       baseUrl: p.defaultBaseUrl ?? "",
       model: p.defaultModel,
-      workspaceId: p.transport === "anthropic" ? prev.workspaceId : "",
-    }));
-    setSaved(false);
+      workspaceId: p.transport === "anthropic" ? undefined : "",
+    } as Partial<ProviderEntry>);
+  }
+  function addProvider() {
+    setProviders([...s.providers, makeEntry("anthropic")]);
+  }
+  function removeProvider(id: string) {
+    setProviders(s.providers.filter((e) => e.id !== id));
+  }
+  function moveProvider(id: string, dir: -1 | 1) {
+    const i = s.providers.findIndex((e) => e.id === id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= s.providers.length) return;
+    const next = [...s.providers];
+    [next[i], next[j]] = [next[j], next[i]];
+    setProviders(next);
+  }
+  function resetUsage(id: string) {
+    updateEntry(id, { usedTokens: 0 });
   }
   function onSave() {
     saveSettings(s);
@@ -105,7 +122,7 @@ export default function SettingsPage() {
   }
   function onClear() {
     clearSettings();
-    setS(DEFAULT_SETTINGS);
+    setS(loadSettings());
     setSaved(false);
   }
 
@@ -234,110 +251,192 @@ export default function SettingsPage() {
 
         {/* ---------- PROVIDERS ---------- */}
         {tab === "providers" && (
-          <div style={styles.card}>
-            <div style={styles.fieldLabel}>Provider</div>
-            <div style={styles.presetGrid}>
-              {PROVIDER_PRESETS.map((p) => {
-                const active = p.id === preset.id;
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => choosePreset(p.id)}
-                    style={{ ...styles.presetChip, ...(active ? styles.presetChipActive : {}) }}
-                  >
-                    {p.label}
-                    {p.local ? <span style={styles.localTag}>local</span> : null}
-                  </button>
-                );
-              })}
-            </div>
+          <>
+            <p style={styles.chainIntro}>
+              Providers are tried <strong>top to bottom</strong>. If one errors (e.g. out of credit)
+              or reaches its usage threshold, the agent falls through to the next enabled provider.
+              Drag priority with the ▲▼ arrows.
+            </p>
 
-            {preset.local && (
-              <div style={styles.guide}>
-                <div style={styles.guideTitle}>Set up {preset.label}</div>
-                <ol style={styles.guideList}>
-                  {preset.setup?.map((step, i) => (
-                    <li key={i} style={styles.guideStep}>
-                      {step}
-                    </li>
-                  ))}
-                </ol>
-                <div style={styles.guideCaveat}>
-                  ⚠ Local models run on your machine, and the agent calls the provider from the{" "}
-                  <strong>server</strong>. So a <code>localhost</code> endpoint only works when you
-                  run NGCRM locally (<code>npm run dev</code>) — the hosted{" "}
-                  <code>ngcrm.vercel.app</code> server can&apos;t reach your computer. Also pick a
-                  model that supports <strong>tool / function calling</strong>.
+            {s.providers.map((e, i) => {
+              const p = getPreset(e.preset);
+              const isAnthropic = p.transport === "anthropic";
+              const overThreshold = e.thresholdTokens > 0 && e.usedTokens >= e.thresholdTokens;
+              return (
+                <div key={e.id} style={styles.card}>
+                  <div style={styles.entryHead}>
+                    <span style={styles.entryNum}>{i + 1}</span>
+                    <label style={styles.entryToggle}>
+                      <input
+                        type="checkbox"
+                        checked={e.enabled}
+                        onChange={(ev) => updateEntry(e.id, { enabled: ev.target.checked })}
+                      />
+                      Enabled
+                    </label>
+                    {overThreshold && <span style={styles.overTag}>threshold reached</span>}
+                    <span style={{ flex: 1 }} />
+                    <button
+                      type="button"
+                      style={styles.iconBtn}
+                      onClick={() => moveProvider(e.id, -1)}
+                      disabled={i === 0}
+                      aria-label="Move up"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      style={styles.iconBtn}
+                      onClick={() => moveProvider(e.id, 1)}
+                      disabled={i === s.providers.length - 1}
+                      aria-label="Move down"
+                    >
+                      ▼
+                    </button>
+                    <button
+                      type="button"
+                      style={styles.iconBtn}
+                      onClick={() => removeProvider(e.id)}
+                      disabled={s.providers.length <= 1}
+                      aria-label="Remove"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div style={styles.presetGrid}>
+                    {PROVIDER_PRESETS.map((pp) => (
+                      <button
+                        key={pp.id}
+                        type="button"
+                        onClick={() => choosePresetFor(e.id, pp.id)}
+                        style={{
+                          ...styles.presetChip,
+                          ...(pp.id === e.preset ? styles.presetChipActive : {}),
+                        }}
+                      >
+                        {pp.label}
+                        {pp.local ? <span style={styles.localTag}>local</span> : null}
+                      </button>
+                    ))}
+                  </div>
+
+                  <label style={styles.label}>
+                    Model
+                    <input
+                      value={e.model}
+                      onChange={(ev) => updateEntry(e.id, { model: ev.target.value })}
+                      placeholder={p.defaultModel}
+                      style={styles.input}
+                    />
+                  </label>
+
+                  <label style={styles.label}>
+                    API key {!p.needsKey && <span style={styles.optional}>(optional for local)</span>}
+                    <div style={styles.keyRow}>
+                      <input
+                        type={showKeys[e.id] ? "text" : "password"}
+                        value={e.apiKey}
+                        onChange={(ev) => updateEntry(e.id, { apiKey: ev.target.value })}
+                        placeholder={p.needsKey ? "paste your key…" : "(usually not required)"}
+                        style={{ ...styles.input, marginBottom: 0 }}
+                        autoComplete="off"
+                        spellCheck={false}
+                      />
+                      <button
+                        type="button"
+                        style={styles.reveal}
+                        onClick={() => setShowKeys((m) => ({ ...m, [e.id]: !m[e.id] }))}
+                      >
+                        {showKeys[e.id] ? "Hide" : "Show"}
+                      </button>
+                    </div>
+                    {p.keyHelp && <span style={styles.help}>{p.keyHelp}</span>}
+                  </label>
+
+                  {isAnthropic ? (
+                    <label style={styles.label}>
+                      Workspace ID <span style={styles.optional}>(only for org-scoped keys)</span>
+                      <input
+                        value={e.workspaceId}
+                        onChange={(ev) => updateEntry(e.id, { workspaceId: ev.target.value })}
+                        placeholder="wrkspc_…"
+                        style={styles.input}
+                      />
+                    </label>
+                  ) : (
+                    <label style={styles.label}>
+                      Base URL
+                      <input
+                        value={e.baseUrl}
+                        onChange={(ev) => updateEntry(e.id, { baseUrl: ev.target.value })}
+                        placeholder={p.defaultBaseUrl}
+                        style={styles.input}
+                      />
+                    </label>
+                  )}
+
+                  <div style={styles.entryRow}>
+                    <label style={styles.smallField}>
+                      Retries
+                      <input
+                        type="number"
+                        min={0}
+                        max={5}
+                        value={e.maxRetries}
+                        onChange={(ev) =>
+                          updateEntry(e.id, { maxRetries: Math.max(0, Number(ev.target.value) || 0) })
+                        }
+                        style={styles.smallInput}
+                      />
+                    </label>
+                    <label style={styles.smallField}>
+                      Token threshold <span style={styles.optional}>(0 = ∞)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={1000}
+                        value={e.thresholdTokens}
+                        onChange={(ev) =>
+                          updateEntry(e.id, {
+                            thresholdTokens: Math.max(0, Number(ev.target.value) || 0),
+                          })
+                        }
+                        style={styles.smallInput}
+                      />
+                    </label>
+                    <div style={styles.usedBox}>
+                      <span style={styles.optional}>Used</span>
+                      <span>{e.usedTokens.toLocaleString()} tok</span>
+                      <button type="button" style={styles.resetBtn} onClick={() => resetUsage(e.id)}>
+                        Reset
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })}
 
-            <label style={styles.label}>
-              Model
-              <input
-                value={s.model || ""}
-                onChange={(e) => update("model", e.target.value)}
-                placeholder={preset.defaultModel}
-                style={styles.input}
-              />
-            </label>
-
-            <label style={styles.label}>
-              API key {!preset.needsKey && <span style={styles.optional}>(optional for local)</span>}
-              <div style={styles.keyRow}>
-                <input
-                  type={showKey ? "text" : "password"}
-                  value={s.apiKey || ""}
-                  onChange={(e) => update("apiKey", e.target.value)}
-                  placeholder={preset.needsKey ? "paste your key…" : "(usually not required)"}
-                  style={{ ...styles.input, marginBottom: 0 }}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-                <button type="button" style={styles.reveal} onClick={() => setShowKey((v) => !v)}>
-                  {showKey ? "Hide" : "Show"}
-                </button>
-              </div>
-              {preset.keyHelp && <span style={styles.help}>{preset.keyHelp}</span>}
-            </label>
-
-            {isAnthropic ? (
-              <label style={styles.label}>
-                Workspace ID <span style={styles.optional}>(only for org-scoped keys)</span>
-                <input
-                  value={s.workspaceId || ""}
-                  onChange={(e) => update("workspaceId", e.target.value)}
-                  placeholder="wrkspc_…"
-                  style={styles.input}
-                />
-              </label>
-            ) : (
-              <label style={styles.label}>
-                Base URL
-                <input
-                  value={s.baseUrl || ""}
-                  onChange={(e) => update("baseUrl", e.target.value)}
-                  placeholder={preset.defaultBaseUrl}
-                  style={styles.input}
-                />
-              </label>
-            )}
-
-            <div style={styles.actions}>
+            <div style={styles.chainActions}>
+              <button type="button" style={styles.addBtn} onClick={addProvider}>
+                + Add provider
+              </button>
+              <span style={{ flex: 1 }} />
               <button type="button" style={styles.save} onClick={onSave}>
                 {saved ? "Saved ✓" : "Save"}
               </button>
               <button type="button" style={styles.clear} onClick={onClear}>
-                Clear
+                Reset
               </button>
             </div>
 
             <p style={styles.note}>
-              Your key is stored only in this browser and sent with each request — never saved on the
-              server. Leave it blank to fall back to the server&apos;s configured provider.
+              Keys are stored only in this browser and sent with each request — never saved on the
+              server. Usage is tracked per provider in this browser; when a provider passes its token
+              threshold it&apos;s skipped until you raise the limit or reset its counter.
             </p>
-          </div>
+          </>
         )}
 
         {/* ---------- THEME ---------- */}
@@ -438,8 +537,75 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 16,
     padding: 20,
     boxShadow: "var(--shadow)",
+    marginBottom: 14,
   },
   fieldLabel: { fontSize: 13, fontWeight: 600, marginBottom: 10 },
+
+  chainIntro: { fontSize: 13, color: "var(--muted)", lineHeight: 1.6, margin: "0 0 14px" },
+  entryHead: { display: "flex", alignItems: "center", gap: 10, marginBottom: 14 },
+  entryNum: {
+    width: 22,
+    height: 22,
+    borderRadius: 999,
+    background: "var(--accent)",
+    color: "var(--accent-fg)",
+    fontSize: 12,
+    fontWeight: 700,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  entryToggle: { display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" },
+  overTag: {
+    fontSize: 11,
+    color: "#d9534f",
+    border: "1px solid #d9534f",
+    borderRadius: 6,
+    padding: "1px 6px",
+  },
+  iconBtn: {
+    border: "1px solid var(--border)",
+    background: "var(--bg)",
+    color: "var(--fg)",
+    borderRadius: 8,
+    width: 30,
+    height: 28,
+    fontSize: 12,
+    cursor: "pointer",
+  },
+  entryRow: { display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" },
+  smallField: { display: "flex", flexDirection: "column", gap: 6, fontSize: 13, fontWeight: 600 },
+  smallInput: {
+    width: 120,
+    padding: "8px 10px",
+    fontSize: 14,
+    borderRadius: 10,
+    border: "1px solid var(--border)",
+    background: "var(--bg)",
+    color: "var(--fg)",
+    outline: "none",
+  },
+  usedBox: { display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginLeft: "auto" },
+  resetBtn: {
+    border: "1px solid var(--border)",
+    background: "var(--bg)",
+    color: "var(--muted)",
+    borderRadius: 8,
+    padding: "5px 10px",
+    fontSize: 12,
+    cursor: "pointer",
+  },
+  chainActions: { display: "flex", alignItems: "center", gap: 10, marginTop: 4 },
+  addBtn: {
+    border: "1px dashed var(--border)",
+    background: "transparent",
+    color: "var(--fg)",
+    borderRadius: 10,
+    padding: "10px 16px",
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: "pointer",
+  },
 
   presetGrid: { display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 18 },
   presetChip: {

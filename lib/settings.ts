@@ -1,65 +1,135 @@
 "use client";
 
-import type { ProviderConfig } from "@/lib/ai/types";
-import { getPreset } from "@/lib/providers";
+import { getPreset, PROVIDER_PRESETS } from "@/lib/providers";
 
 /**
  * Bring-your-own-key settings, stored in the browser's localStorage.
- * The API key never leaves the visitor's browser except to be sent with each
- * agent request over HTTPS; it is never persisted on the server.
+ * Keys never leave the browser except to be sent with each agent request.
  *
- * `preset` is a client-only convenience (which provider card is selected); the
- * server's route ignores it and reads only the ProviderConfig fields.
+ * Providers are an ordered failover chain: the agent tries them top-to-bottom,
+ * retrying transient errors up to `maxRetries` and moving to the next when one
+ * errors (e.g. out of credit) or hits its `thresholdTokens` usage cap.
  */
-export type ClientSettings = ProviderConfig & {
-  preset?: string;
-  /** Display toggles (client-only; ignored by the server). */
+
+export type ProviderEntry = {
+  id: string;
+  preset: string;
+  provider: string; // transport: anthropic | openai-compatible
+  model: string;
+  apiKey: string;
+  baseUrl: string;
+  workspaceId: string;
+  enabled: boolean;
+  maxRetries: number;
+  thresholdTokens: number; // 0 = unlimited
+  usedTokens: number; // cumulative, tracked client-side
+};
+
+export type ClientSettings = {
+  providers: ProviderEntry[];
   showTokens?: boolean;
   showCost?: boolean;
-  /** Demo access role, sent as a header to scope RLS (stands in for real auth). */
-  demoRole?: string;
+};
+
+/** Candidate shape sent to the server (matches ProviderCandidate). */
+export type Candidate = {
+  label: string;
+  provider: string;
+  model: string;
+  apiKey: string;
+  baseUrl: string;
+  workspaceId: string;
+  maxRetries: number;
 };
 
 const KEY = "ngcrm.settings.v1";
 
-export const DEFAULT_SETTINGS: ClientSettings = {
-  preset: "anthropic",
-  provider: "anthropic",
-  model: "claude-sonnet-5",
-  apiKey: "",
-  baseUrl: "",
-  workspaceId: "",
-  showTokens: true,
-  showCost: true,
-  demoRole: "staff",
-};
-
-/**
- * Model ids that providers have retired. A browser that saved one of these
- * keeps sending it forever, so we transparently upgrade it on load — this lets
- * a stale localStorage self-heal instead of hard-failing with a 404.
- */
 const RETIRED_MODELS: Record<string, string> = {
   "gemini-2.5-flash": "gemini-3.6-flash",
   "gemini-2.5-pro": "gemini-3.6-flash",
 };
 
-function migrate(s: ClientSettings): ClientSettings {
-  if (s.model && RETIRED_MODELS[s.model]) {
-    return { ...s, model: RETIRED_MODELS[s.model] };
+function genId(): string {
+  try {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  } catch {
+    /* ignore */
   }
-  return s;
+  return `p_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** A fresh provider entry seeded from a preset. */
+export function makeEntry(presetId = "anthropic"): ProviderEntry {
+  const p = getPreset(presetId);
+  return {
+    id: genId(),
+    preset: p.id,
+    provider: p.transport,
+    model: p.defaultModel,
+    apiKey: "",
+    baseUrl: p.defaultBaseUrl ?? "",
+    workspaceId: "",
+    enabled: true,
+    maxRetries: 1,
+    thresholdTokens: 0,
+    usedTokens: 0,
+  };
+}
+
+export const DEFAULT_SETTINGS: ClientSettings = {
+  providers: [makeEntry("anthropic")],
+  showTokens: true,
+  showCost: true,
+};
+
+/** Load settings, migrating the old single-provider shape into a chain. */
 export function loadSettings(): ClientSettings {
-  if (typeof window === "undefined") return { ...DEFAULT_SETTINGS };
+  if (typeof window === "undefined") return { ...DEFAULT_SETTINGS, providers: [makeEntry()] };
   try {
     const raw = window.localStorage.getItem(KEY);
-    if (!raw) return { ...DEFAULT_SETTINGS };
-    return migrate({ ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as ClientSettings) });
+    if (!raw) return { ...DEFAULT_SETTINGS, providers: [makeEntry()] };
+    const parsed = JSON.parse(raw) as Partial<ClientSettings> & Record<string, unknown>;
+
+    let providers: ProviderEntry[];
+    if (Array.isArray(parsed.providers) && parsed.providers.length > 0) {
+      providers = parsed.providers.map(normalizeEntry);
+    } else {
+      // Legacy single-provider settings -> one entry.
+      const legacy = makeEntry((parsed.preset as string) || "anthropic");
+      providers = [
+        {
+          ...legacy,
+          provider: (parsed.provider as string) || legacy.provider,
+          model: (parsed.model as string) || legacy.model,
+          apiKey: (parsed.apiKey as string) || "",
+          baseUrl: (parsed.baseUrl as string) || legacy.baseUrl,
+          workspaceId: (parsed.workspaceId as string) || "",
+        },
+      ];
+    }
+    return {
+      providers,
+      showTokens: parsed.showTokens ?? true,
+      showCost: parsed.showCost ?? true,
+    };
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return { ...DEFAULT_SETTINGS, providers: [makeEntry()] };
   }
+}
+
+function normalizeEntry(e: Partial<ProviderEntry>): ProviderEntry {
+  const base = makeEntry(e.preset || "anthropic");
+  const model = e.model || base.model;
+  return {
+    ...base,
+    ...e,
+    id: e.id || base.id,
+    model: RETIRED_MODELS[model] || model, // self-heal retired ids
+    maxRetries: Number.isFinite(Number(e.maxRetries)) ? Number(e.maxRetries) : base.maxRetries,
+    thresholdTokens: Number.isFinite(Number(e.thresholdTokens)) ? Number(e.thresholdTokens) : 0,
+    usedTokens: Number.isFinite(Number(e.usedTokens)) ? Number(e.usedTokens) : 0,
+    enabled: e.enabled !== false,
+  };
 }
 
 export function saveSettings(s: ClientSettings): void {
@@ -67,7 +137,7 @@ export function saveSettings(s: ClientSettings): void {
   try {
     window.localStorage.setItem(KEY, JSON.stringify(s));
   } catch {
-    /* storage unavailable (private mode, blocked) — ignore */
+    /* storage unavailable — ignore */
   }
 }
 
@@ -80,9 +150,48 @@ export function clearSettings(): void {
   }
 }
 
-/** Whether the user has configured enough to run against their own provider. */
-export function hasUsableKey(s: ClientSettings): boolean {
-  // Local runtimes (Ollama, LM Studio) need no key; cloud providers do.
-  if (!getPreset(s.preset).needsKey) return true;
-  return Boolean(s.apiKey && s.apiKey.trim());
+/** Whether an entry can actually be used (enabled, has a key if required, under threshold). */
+export function entryEligible(e: ProviderEntry): boolean {
+  if (!e.enabled) return false;
+  const needsKey = getPreset(e.preset).needsKey;
+  if (needsKey && !e.apiKey.trim()) return false;
+  if (e.thresholdTokens > 0 && e.usedTokens >= e.thresholdTokens) return false;
+  return true;
 }
+
+/** The ordered failover chain to send with a request. */
+export function eligibleChain(s: ClientSettings): Candidate[] {
+  return s.providers.filter(entryEligible).map((e) => ({
+    label: e.id,
+    provider: e.provider,
+    model: e.model,
+    apiKey: e.apiKey,
+    baseUrl: e.baseUrl,
+    workspaceId: e.workspaceId,
+    maxRetries: e.maxRetries,
+  }));
+}
+
+/** Whether at least one provider is ready to use. */
+export function hasUsableKey(s: ClientSettings): boolean {
+  return s.providers.some(entryEligible);
+}
+
+/** Accumulate per-provider token usage returned by the server (matched by id/label). */
+export function recordUsage(
+  usage: { label: string; tokens: number }[] | undefined
+): void {
+  if (!usage || usage.length === 0) return;
+  const s = loadSettings();
+  let changed = false;
+  for (const u of usage) {
+    const entry = s.providers.find((p) => p.id === u.label);
+    if (entry) {
+      entry.usedTokens += u.tokens;
+      changed = true;
+    }
+  }
+  if (changed) saveSettings(s);
+}
+
+export const PRESET_OPTIONS = PROVIDER_PRESETS;

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { loadSettings, hasUsableKey } from "@/lib/settings";
+import { loadSettings, hasUsableKey, eligibleChain, recordUsage } from "@/lib/settings";
 import { estimateCostUSD, formatUSD } from "@/lib/pricing";
 import { Logo } from "@/components/Logo";
 
@@ -26,6 +26,9 @@ type AgentResult = {
   historyId?: number | null;
   personalized?: boolean;
   role?: string;
+  providerUsed?: string | null;
+  providerUsage?: { label: string; model: string; tokens: number }[];
+  failovers?: { label: string; reason: string }[];
 };
 
 type HistoryItem = {
@@ -116,11 +119,12 @@ export default function Home() {
       const res = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ intent: value, config: settings }),
+        body: JSON.stringify({ intent: value, providers: eligibleChain(settings) }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Request failed");
       setResult(data as AgentResult);
+      recordUsage((data as AgentResult).providerUsage); // per-provider usage -> thresholds
       refreshRecent();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -266,6 +270,9 @@ export default function Home() {
               {result.turns ? ` · ${result.turns} model ${result.turns === 1 ? "turn" : "turns"}` : ""}
               {result.personalized ? " · ✦ personalized" : ""}
               {result.role ? ` · 🔒 as ${result.role}` : ""}
+              {result.failovers && result.failovers.length > 0
+                ? ` · ⤳ failed over ${result.failovers.length}×`
+                : ""}
             </div>
 
             {result.historyId != null && (

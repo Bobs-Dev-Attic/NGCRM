@@ -3,7 +3,7 @@ import { runAgent } from "@/lib/ai/agent";
 import { saveRequest } from "@/lib/history";
 import { runWithContext } from "@/lib/db";
 import { contextFromRequest } from "@/lib/access";
-import type { ProviderConfig } from "@/lib/ai/types";
+import type { ProviderCandidate, ProviderConfig } from "@/lib/ai/types";
 
 // The agent uses the Node.js runtime (SDKs + DB pooling), not Edge.
 export const runtime = "nodejs";
@@ -24,13 +24,26 @@ function parseConfig(raw: unknown): ProviderConfig {
   };
 }
 
+function parseCandidate(raw: unknown): ProviderCandidate {
+  const base = parseConfig(raw);
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const label = typeof r.label === "string" && r.label.trim() ? r.label.trim() : undefined;
+  const maxRetries = Number.isFinite(Number(r.maxRetries)) ? Number(r.maxRetries) : 0;
+  return { ...base, label, maxRetries };
+}
+
 export async function POST(req: Request) {
   let intent = "";
-  let config: ProviderConfig = {};
+  let providerInput: ProviderConfig | ProviderCandidate[] = {};
   try {
     const body = await req.json();
     intent = typeof body?.intent === "string" ? body.intent.trim() : "";
-    config = parseConfig(body?.config);
+    // Preferred: an ordered failover chain. Falls back to a single config.
+    if (Array.isArray(body?.providers)) {
+      providerInput = body.providers.map(parseCandidate);
+    } else {
+      providerInput = parseConfig(body?.config);
+    }
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
@@ -48,7 +61,7 @@ export async function POST(req: Request) {
 
   return runWithContext(ctx, async () => {
     try {
-      const result = await runAgent(intent, config);
+      const result = await runAgent(intent, providerInput);
       const historyId = await saveRequest(intent, result);
       return NextResponse.json({ ...result, historyId, role: ctx.role });
     } catch (err) {

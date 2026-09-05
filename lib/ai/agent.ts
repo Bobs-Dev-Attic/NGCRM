@@ -1,7 +1,7 @@
 import { getProvider } from "./provider";
 import { tools, getToolByName } from "./tools";
 import { buildWorkingStyle } from "@/lib/profile";
-import type { Message, ProviderConfig, Usage } from "./types";
+import type { Message, ProviderCandidate, ProviderConfig, Usage } from "./types";
 
 export type AgentStep = {
   type: "text" | "tool";
@@ -26,6 +26,10 @@ export type AgentResult = {
   turns: number;
   /** Whether a learned working-style profile was applied to this request. */
   personalized: boolean;
+  /** Failover: which provider (label) served, per-provider token usage, and any failovers. */
+  providerUsed?: string | null;
+  providerUsage?: { label: string; model: string; tokens: number }[];
+  failovers?: { label: string; reason: string }[];
 };
 
 const SYSTEM_PROMPT = `You are the assistant inside "Next-Gen CRM", an AI-native CRM for a non-profit organization.
@@ -62,9 +66,9 @@ const MAX_TURNS = 6;
  */
 export async function runAgent(
   userIntent: string,
-  config: ProviderConfig = {}
+  providerInput: ProviderConfig | ProviderCandidate[] = {}
 ): Promise<AgentResult> {
-  const provider = getProvider(config);
+  const provider = getProvider(providerInput);
   const messages: Message[] = [{ role: "user", content: userIntent }];
   const steps: AgentStep[] = [];
   let answer = "";
@@ -132,5 +136,17 @@ export async function runAgent(
       "I worked through that but didn't produce a final summary. Check the steps below for what happened.";
   }
 
-  return { provider: provider.name, model: provider.model, answer, steps, usage, turns, personalized };
+  const rep = provider.report?.();
+  return {
+    provider: provider.name,
+    model: provider.model,
+    answer,
+    steps,
+    usage,
+    turns,
+    personalized,
+    providerUsed: rep?.providerUsed,
+    providerUsage: rep?.providerUsage,
+    failovers: rep?.failovers,
+  };
 }

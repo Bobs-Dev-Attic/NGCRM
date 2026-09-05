@@ -62,6 +62,23 @@ export type ProviderConfig = {
   workspaceId?: string; // Anthropic org-key workspace id
 };
 
+/**
+ * One entry in a failover chain: a provider config plus a stable label (for
+ * usage attribution back to the UI) and how many times to retry it on transient
+ * errors before moving to the next provider.
+ */
+export type ProviderCandidate = ProviderConfig & {
+  label?: string;
+  maxRetries?: number;
+};
+
+/** Reported by a failover provider after a request. */
+export type FailoverReport = {
+  providerUsed: string | null;
+  providerUsage: { label: string; model: string; tokens: number }[];
+  failovers: { label: string; reason: string }[];
+};
+
 /** A tool the agent can call. Declared once, used by every provider. */
 export type AgentTool = {
   name: string;
@@ -80,4 +97,6 @@ export interface LLMProvider {
     messages: Message[],
     tools: AgentTool[]
   ): Promise<ProviderResponse>;
+  /** Optional: failover providers report which provider(s) served the request. */
+  report?(): FailoverReport;
 }
