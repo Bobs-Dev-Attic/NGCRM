@@ -29,7 +29,9 @@ Agent loop  (lib/ai/agent.ts)
 - **Tools** — each CRM capability is one tool in `lib/ai/tools.ts`. Adding a
   feature = adding a tool; the UI and agent loop don't change.
 - **Database** — Neon Postgres (`db/schema.sql`): contacts, households,
-  campaigns, donations, goals, tasks.
+  campaigns, donations, goals, tasks, and `request_history` (every intent +
+  result + usage + feedback). `db:migrate` is idempotent — re-run it after
+  pulling schema changes to add new tables.
 
 ## Getting started
 

@@ -74,3 +74,25 @@ CREATE TABLE IF NOT EXISTS tasks (
   result      TEXT,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Request history: every intent the operator typed, the agent's answer, which
+-- tools it used, token/turn usage, and optional feedback. This is both a
+-- convenience (recall past work) and the raw signal for personalizing how the
+-- agent works for a given user over time.
+CREATE TABLE IF NOT EXISTS request_history (
+  id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  intent        TEXT NOT NULL,                  -- what the user asked
+  answer        TEXT,                           -- the agent's final summary
+  provider      TEXT,
+  model         TEXT,
+  input_tokens  INT NOT NULL DEFAULT 0,
+  output_tokens INT NOT NULL DEFAULT 0,
+  total_tokens  INT NOT NULL DEFAULT 0,
+  turns         INT NOT NULL DEFAULT 0,
+  tools_used    TEXT[] NOT NULL DEFAULT '{}',   -- names of tools the agent called
+  steps         JSONB,                          -- full action trail
+  rating        SMALLINT,                       -- user feedback: -1, +1, or NULL
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_history_created ON request_history (created_at DESC);
