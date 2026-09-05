@@ -139,6 +139,23 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Campaign sends: an audit record of each send of a draft (dry run or live).
+CREATE TABLE IF NOT EXISTS campaign_sends (
+  id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  org_id          BIGINT DEFAULT nullif(current_setting('app.org_id', true), '')::bigint,
+  draft_id        BIGINT REFERENCES campaign_drafts(id) ON DELETE SET NULL,
+  campaign_id     BIGINT REFERENCES campaigns(id) ON DELETE SET NULL,
+  mode            TEXT NOT NULL DEFAULT 'dry_run',   -- dry_run | live
+  provider        TEXT,
+  recipient_count INT NOT NULL DEFAULT 0,
+  sent_count      INT NOT NULL DEFAULT 0,
+  failed_count    INT NOT NULL DEFAULT 0,
+  note            TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE campaign_drafts ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ;
+
 -- Add org_id to every tenant-scoped table; contacts also get a sensitivity tag.
 ALTER TABLE households      ADD COLUMN IF NOT EXISTS org_id BIGINT;
 ALTER TABLE contacts        ADD COLUMN IF NOT EXISTS org_id BIGINT;
@@ -224,3 +241,8 @@ ALTER TABLE request_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE request_history FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS request_history_all ON request_history;
 CREATE POLICY request_history_all ON request_history FOR ALL USING (app_org() IS NULL OR org_id = app_org()) WITH CHECK (app_org() IS NULL OR org_id = app_org());
+
+ALTER TABLE campaign_sends ENABLE ROW LEVEL SECURITY;
+ALTER TABLE campaign_sends FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS campaign_sends_all ON campaign_sends;
+CREATE POLICY campaign_sends_all ON campaign_sends FOR ALL USING (app_org() IS NULL OR org_id = app_org()) WITH CHECK (app_org() IS NULL OR org_id = app_org());

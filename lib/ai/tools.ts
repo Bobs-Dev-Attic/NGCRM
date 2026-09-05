@@ -1,4 +1,5 @@
 import { getSql } from "@/lib/db";
+import { resendConfigured, sendEmail } from "@/lib/email";
 import type { AgentTool } from "./types";
 
 /**
@@ -179,6 +180,23 @@ async function queryAudience(f: AudienceFilter) {
     ORDER BY last_name NULLS LAST LIMIT 10
   `;
   return { count: n, sample };
+}
+
+/** The contacts (with emails) that match an audience filter, capped. */
+async function audienceEmails(f: AudienceFilter, cap = 1000) {
+  const sql = getSql();
+  const donorOnly = f.donor_only === true ? true : null;
+  const rows = (await sql`
+    SELECT first_name, email FROM contacts c
+    WHERE email IS NOT NULL AND email <> ''
+      AND (${f.tag}::text IS NULL OR ${f.tag} = ANY(c.tags))
+      AND (${f.city}::text IS NULL OR lower(c.city) = lower(${f.city}))
+      AND (${f.state}::text IS NULL OR lower(c.state) = lower(${f.state}))
+      AND (${donorOnly}::bool IS NOT TRUE
+           OR EXISTS (SELECT 1 FROM donations d WHERE d.contact_id = c.id))
+    LIMIT ${cap}
+  `) as { first_name: string | null; email: string }[];
+  return rows;
 }
 
 /** Resolve a campaign by id, or by name (creating it if missing). */
@@ -732,6 +750,133 @@ export const tools: AgentTool[] = [
         ORDER BY d.created_at DESC LIMIT 25
       `;
       return { drafts: rows };
+    },
+  },
+
+  {
+    name: "approve_campaign_draft",
+    description:
+      "Mark a campaign draft as approved, which is required before it can be sent. Only call this when the user has explicitly approved the draft's content and audience.",
+    inputSchema: {
+      type: "object",
+      properties: { draft_id: { type: "number" } },
+      required: ["draft_id"],
+    },
+    async execute(input) {
+      const sql = getSql();
+      const id = toInt(input.draft_id);
+      if (!id) return { error: "A valid draft_id is required." };
+      const [row] = (await sql`
+        UPDATE campaign_drafts SET status = 'approved'
+        WHERE id = ${id} AND status <> 'sent'
+        RETURNING id, subject, status
+      `) as { id: number; subject: string; status: string }[];
+      if (!row) return { error: "Draft not found, or it was already sent." };
+      return { approved: row };
+    },
+  },
+
+  {
+    name: "send_campaign",
+    description:
+      "Send an APPROVED campaign draft to its audience. This is a real outbound action, so only call it when the user has explicitly told you to send this specific draft. Defaults to a DRY RUN (records the send and marks it sent, but emails no one). Pass mode:'live' ONLY if the user explicitly asked to send for real — live sending also requires a configured email provider. The draft must be approved first (approve_campaign_draft).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        draft_id: { type: "number" },
+        mode: { type: "string", description: "'dry_run' (default) or 'live'" },
+      },
+      required: ["draft_id"],
+    },
+    async execute(input) {
+      const sql = getSql();
+      const id = toInt(input.draft_id);
+      if (!id) return { error: "A valid draft_id is required." };
+
+      const [draft] = (await sql`
+        SELECT id, campaign_id, subject, body, audience_filter, status
+        FROM campaign_drafts WHERE id = ${id}
+      `) as {
+        id: number;
+        campaign_id: number | null;
+        subject: string;
+        body: string;
+        audience_filter: AudienceFilter | null;
+        status: string;
+      }[];
+      if (!draft) return { error: "Draft not found." };
+      if (draft.status !== "approved") {
+        return {
+          error:
+            "This draft isn't approved yet. Approve it with approve_campaign_draft after the user confirms, then send.",
+        };
+      }
+
+      const wantLive = str(input.mode) === "live";
+      const recipients = await audienceEmails(normalizeAudience(draft.audience_filter ?? {}));
+      const recipientCount = recipients.length;
+
+      let mode = "dry_run";
+      let sent = 0;
+      let failed = 0;
+      let note = "";
+
+      if (wantLive) {
+        if (!resendConfigured()) {
+          return {
+            error:
+              "Live send requested but no email provider is configured (set RESEND_API_KEY and RESEND_FROM). You can run a dry run instead.",
+          };
+        }
+        if (recipientCount > 500) {
+          return { error: `Too many recipients for a single live send (${recipientCount} > 500).` };
+        }
+        mode = "live";
+        for (const r of recipients) {
+          const body = draft.body.replaceAll("{first_name}", r.first_name || "there");
+          try {
+            await sendEmail(r.email, draft.subject, body);
+            sent++;
+          } catch {
+            failed++;
+          }
+        }
+        note = `Live send via Resend: ${sent} sent, ${failed} failed.`;
+      } else {
+        sent = recipientCount;
+        note = "Dry run — no emails were sent.";
+      }
+
+      await sql`
+        INSERT INTO campaign_sends
+          (draft_id, campaign_id, mode, provider, recipient_count, sent_count, failed_count, note)
+        VALUES
+          (${draft.id}, ${draft.campaign_id}, ${mode}, ${mode === "live" ? "resend" : null},
+           ${recipientCount}, ${sent}, ${failed}, ${note})
+      `;
+      await sql`UPDATE campaign_drafts SET status = 'sent', sent_at = now() WHERE id = ${draft.id}`;
+
+      return { mode, recipient_count: recipientCount, sent_count: sent, failed_count: failed, note };
+    },
+  },
+
+  {
+    name: "list_campaign_sends",
+    description: "List the send history (dry runs and live sends) for campaigns.",
+    inputSchema: {
+      type: "object",
+      properties: { campaign_id: { type: "number", description: "Filter to one campaign" } },
+    },
+    async execute(input) {
+      const sql = getSql();
+      const id = toInt(input.campaign_id);
+      const rows = await sql`
+        SELECT id, draft_id, campaign_id, mode, recipient_count, sent_count, failed_count, note, created_at
+        FROM campaign_sends
+        WHERE (${id}::bigint IS NULL OR campaign_id = ${id})
+        ORDER BY created_at DESC LIMIT 25
+      `;
+      return { sends: rows };
     },
   },
 ];

@@ -7,6 +7,18 @@ exact Git commit (on Vercel deploys).
 This project uses loose semantic versioning while pre-1.0: minor bumps for
 features, patch bumps for fixes.
 
+## 0.12.0 — Campaign send step (with approval gate)
+- `approve_campaign_draft` marks a draft approved (required before sending).
+- `send_campaign` sends an approved draft to its audience — a real outbound
+  action, gated: defaults to a **dry run** (records the send, emails no one);
+  `mode:"live"` sends via Resend and only when `RESEND_API_KEY`/`RESEND_FROM`
+  are set. `{first_name}` is personalized per recipient; live sends are capped.
+- `list_campaign_sends` shows send history; `campaign_sends` table + `sent_at`
+  on drafts record it (org-scoped under RLS).
+- Agent is instructed never to send on its own: draft → user approves →
+  approve_campaign_draft → send (dry run unless the user asks for live).
+- New optional env: `RESEND_API_KEY`, `RESEND_FROM`. **Re-run `db:migrate`.**
+
 ## 0.11.1 — Providers table UI
 - Settings → Providers is now a compact table: one row per provider (name,
   model, on/off, used/threshold). Reorder by drag & drop; a ⋯ row menu has
