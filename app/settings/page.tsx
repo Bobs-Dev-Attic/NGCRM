@@ -11,13 +11,35 @@ import {
 } from "@/lib/settings";
 import { PROVIDER_PRESETS, getPreset } from "@/lib/providers";
 
+type WorkingStyle = {
+  totalRequests: number;
+  dominantPeriod: string | null;
+  topTools: { tool: string; n: number }[];
+  likedTools: string[];
+  dislikedTools: string[];
+  recentIntents: string[];
+};
+
 export default function SettingsPage() {
   const [s, setS] = useState<ClientSettings>(DEFAULT_SETTINGS);
   const [saved, setSaved] = useState(false);
   const [showKey, setShowKey] = useState(false);
+  const [profile, setProfile] = useState<WorkingStyle | null>(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
 
   useEffect(() => {
     setS(loadSettings());
+    (async () => {
+      try {
+        const res = await fetch("/api/profile");
+        const data = await res.json();
+        setProfile(data?.profile ?? null);
+      } catch {
+        setProfile(null);
+      } finally {
+        setProfileLoaded(true);
+      }
+    })();
   }, []);
 
   const preset = getPreset(s.preset);
@@ -194,6 +216,54 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        <div style={styles.card}>
+          <div style={styles.fieldLabel}>Working style — learned from your history</div>
+          {!profileLoaded ? (
+            <div style={styles.styleEmpty}>Loading…</div>
+          ) : !profile ? (
+            <div style={styles.styleEmpty}>
+              No history yet. Run a few requests (and rate them 👍/👎) and this fills in.
+              It&apos;s derived from the saved request history and folded into the agent&apos;s
+              instructions on every request.
+            </div>
+          ) : (
+            <div style={styles.styleBody}>
+              <div style={styles.styleRow}>
+                <span style={styles.styleKey}>Requests logged</span>
+                <span>{profile.totalRequests}</span>
+              </div>
+              {profile.dominantPeriod && (
+                <div style={styles.styleRow}>
+                  <span style={styles.styleKey}>Usually works</span>
+                  <span>{profile.dominantPeriod}</span>
+                </div>
+              )}
+              {profile.topTools.length > 0 && (
+                <div style={styles.styleRow}>
+                  <span style={styles.styleKey}>Most-used actions</span>
+                  <span>{profile.topTools.map((t) => `${t.tool} (${t.n})`).join(", ")}</span>
+                </div>
+              )}
+              {profile.likedTools.length > 0 && (
+                <div style={styles.styleRow}>
+                  <span style={styles.styleKey}>Rated well 👍</span>
+                  <span>{profile.likedTools.join(", ")}</span>
+                </div>
+              )}
+              {profile.dislikedTools.length > 0 && (
+                <div style={styles.styleRow}>
+                  <span style={styles.styleKey}>Rated poorly 👎</span>
+                  <span>{profile.dislikedTools.join(", ")}</span>
+                </div>
+              )}
+              <div style={styles.styleNote}>
+                This profile is injected into the agent&apos;s instructions on every request,
+                so its answers adapt to how you work.
+              </div>
+            </div>
+          )}
+        </div>
+
         <p style={styles.note}>
           Leave the key blank to fall back to the server&apos;s configured provider
           (if any). Per-request browser settings always take precedence.
@@ -321,4 +391,16 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
   },
   note: { fontSize: 13, color: "var(--muted)", lineHeight: 1.6, marginTop: 18 },
+  styleEmpty: { fontSize: 13, color: "var(--muted)", lineHeight: 1.6 },
+  styleBody: { display: "flex", flexDirection: "column", gap: 8 },
+  styleRow: { display: "flex", gap: 12, fontSize: 13.5, alignItems: "baseline" },
+  styleKey: { color: "var(--muted)", minWidth: 140, flexShrink: 0 },
+  styleNote: {
+    marginTop: 6,
+    paddingTop: 10,
+    borderTop: "1px solid var(--border)",
+    fontSize: 12.5,
+    color: "var(--muted)",
+    lineHeight: 1.6,
+  },
 };
