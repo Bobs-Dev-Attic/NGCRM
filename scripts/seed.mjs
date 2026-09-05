@@ -54,10 +54,31 @@ for (const [first, last, email, zip, city, tags] of contacts) {
   `;
 }
 
-await sql`
+const [campaign] = await sql`
   INSERT INTO campaigns (name, event_date, goal_amount, status, org_id)
   VALUES ('Spring Gala 2026', '2026-04-18', 50000, 'draft', ${orgId})
+  RETURNING id
 `;
+
+// A few demo gifts so the dashboard's "Total raised" / "Top donors" populate.
+// Matched to seeded donors by email; restricted (board) donors give larger gifts.
+const gifts = [
+  ["maria.chang@example.org", 250, "2026-01-12"],
+  ["maria.chang@example.org", 100, "2026-03-02"],
+  ["david.chang@example.org", 75, "2026-02-20"],
+  ["james.okafor@example.org", 500, "2026-01-30"],
+  ["lena.novak@example.org", 2500, "2026-02-14"],
+  ["lena.novak@example.org", 1000, "2026-04-19"],
+];
+console.log(`Seeding ${gifts.length} donations…`);
+for (const [email, amount, date] of gifts) {
+  await sql`
+    INSERT INTO donations (contact_id, campaign_id, amount, donated_at, org_id)
+    SELECT id, ${campaign.id}, ${amount}, ${date}, ${orgId}
+    FROM contacts WHERE email = ${email} AND org_id IS NOT DISTINCT FROM ${orgId}
+    ORDER BY id LIMIT 1
+  `;
+}
 
 // Demo users so the role-based RLS is testable by logging in. Password: demo1234
 const demoUsers = [

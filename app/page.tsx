@@ -147,6 +147,9 @@ export default function Home() {
               👤 Users
             </Link>
           )}
+          <Link href="/dashboard" style={styles.settingsLink}>
+            📊 Dashboard
+          </Link>
           <Link href="/settings" style={styles.settingsLink}>
             ⚙ Settings
           </Link>
