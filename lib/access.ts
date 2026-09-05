@@ -1,22 +1,23 @@
-import { getDefaultOrgId, type RequestContext } from "@/lib/db";
+import { getTokenFromCookie, verifySession, authSecret } from "@/lib/auth";
+import type { RequestContext } from "@/lib/db";
 
-/**
- * Demo access roles. In a real deployment these would come from authenticated
- * identity (session/JWT) set server-side; here we accept a header from the
- * browser so the RLS behavior can be demonstrated by switching roles. The header
- * is a stand-in for real auth — it does not weaken RLS, which enforces whatever
- * role is in effect.
- */
 export const ROLES = ["admin", "staff", "volunteer"] as const;
 export type Role = (typeof ROLES)[number];
 
-export function normalizeRole(v: string | null | undefined): Role {
-  return v && (ROLES as readonly string[]).includes(v) ? (v as Role) : "staff";
-}
-
-/** Build the request identity (org + role) for RLS scoping. */
-export async function contextFromRequest(req: Request): Promise<RequestContext> {
-  const role = normalizeRole(req.headers.get("x-ngcrm-role"));
-  const orgId = await getDefaultOrgId();
-  return { orgId, userId: "demo-user", role };
+/**
+ * Build the request identity (org + role) from the authenticated session cookie.
+ * Returns null when there is no valid session — callers should reject (401).
+ * The role and org come from the signed session, so they cannot be spoofed by
+ * the client, and RLS enforces whatever identity is in effect.
+ */
+export async function contextFromRequest(req: Request): Promise<RequestContext | null> {
+  const token = getTokenFromCookie(req.headers.get("cookie"));
+  if (!token) return null;
+  try {
+    const payload = await verifySession(token, authSecret());
+    if (!payload) return null;
+    return { orgId: payload.orgId, userId: String(payload.userId), role: payload.role };
+  } catch {
+    return null;
+  }
 }

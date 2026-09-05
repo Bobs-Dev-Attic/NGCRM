@@ -128,6 +128,17 @@ CREATE TABLE IF NOT EXISTS orgs (
 );
 INSERT INTO orgs (name) SELECT 'Demo Organization' WHERE NOT EXISTS (SELECT 1 FROM orgs);
 
+-- Users: authentication + role. Looked up by email pre-auth, so this table is
+-- intentionally NOT under RLS (you don't know the org before you log in).
+CREATE TABLE IF NOT EXISTS users (
+  id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  org_id        BIGINT REFERENCES orgs(id) ON DELETE CASCADE,
+  email         TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  role          TEXT NOT NULL DEFAULT 'staff',   -- admin | staff | volunteer
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Add org_id to every tenant-scoped table; contacts also get a sensitivity tag.
 ALTER TABLE contacts        ADD COLUMN IF NOT EXISTS org_id BIGINT;
 ALTER TABLE contacts        ADD COLUMN IF NOT EXISTS sensitivity TEXT NOT NULL DEFAULT 'normal';

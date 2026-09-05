@@ -40,8 +40,11 @@ export async function POST(req: Request) {
   }
 
   // Establish the access identity for this request; every DB call the agent
-  // makes is scoped to it via RLS.
+  // makes is scoped to it via RLS. No valid session -> reject.
   const ctx = await contextFromRequest(req);
+  if (!ctx) {
+    return NextResponse.json({ error: "Please sign in." }, { status: 401 });
+  }
 
   return runWithContext(ctx, async () => {
     try {

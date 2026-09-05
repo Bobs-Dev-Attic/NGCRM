@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   loadSettings,
   saveSettings,
@@ -45,6 +46,10 @@ export default function SettingsPage() {
   // Theme
   const [theme, setThemeState] = useState<ThemeState>({ theme: "system" });
 
+  // Signed-in user
+  const [me, setMe] = useState<{ email: string; role: string } | null>(null);
+  const router = useRouter();
+
   useEffect(() => {
     setS(loadSettings());
     setThemeState(loadTheme());
@@ -59,7 +64,20 @@ export default function SettingsPage() {
         setProfileLoaded(true);
       }
     })();
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setMe(d?.user ?? null))
+      .catch(() => setMe(null));
   }, []);
+
+  async function logout() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      /* ignore */
+    }
+    router.replace("/login");
+  }
 
   // --- provider handlers ---
   const preset = getPreset(s.preset);
@@ -97,12 +115,6 @@ export default function SettingsPage() {
     const next = { ...loadSettings(), [k]: v };
     saveSettings(next);
     setS((prev) => ({ ...prev, [k]: v }));
-  }
-
-  function updateRole(role: string) {
-    const next = { ...loadSettings(), demoRole: role };
-    saveSettings(next);
-    setS((prev) => ({ ...prev, demoRole: role }));
   }
 
   // --- theme handlers ---
@@ -143,28 +155,32 @@ export default function SettingsPage() {
         {/* ---------- PROFILES ---------- */}
         {tab === "profiles" && (
           <div style={styles.card}>
-            <div style={styles.fieldLabel}>Acting as (demo access role)</div>
-            <div style={styles.presetGrid}>
-              {["admin", "staff", "volunteer"].map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => updateRole(r)}
-                  style={{
-                    ...styles.presetChip,
-                    ...((s.demoRole ?? "staff") === r ? styles.presetChipActive : {}),
-                  }}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
-            <p style={styles.note}>
-              Requests run under this role, enforced by database row-level security. Try{" "}
-              <strong>volunteer</strong>: records marked restricted (e.g. board / major donors)
-              disappear from counts and lists — the database withholds them, not the AI. In a real
-              deployment this role comes from your login, not a switch.
-            </p>
+            <div style={styles.fieldLabel}>Signed in</div>
+            {me ? (
+              <div style={styles.styleBody}>
+                <div style={styles.styleRow}>
+                  <span style={styles.styleKey}>Account</span>
+                  <span>{me.email}</span>
+                </div>
+                <div style={styles.styleRow}>
+                  <span style={styles.styleKey}>Role</span>
+                  <span>{me.role}</span>
+                </div>
+                <div style={styles.actions}>
+                  <button type="button" style={styles.clear} onClick={logout}>
+                    Log out
+                  </button>
+                </div>
+                <div style={styles.styleNote}>
+                  Your role comes from your account and is enforced by database row-level security.
+                  A <strong>volunteer</strong> cannot see records marked restricted (e.g. board /
+                  major donors) — the database withholds them, not the AI. Roles are managed per
+                  user in the <code>users</code> table.
+                </div>
+              </div>
+            ) : (
+              <div style={styles.styleEmpty}>Not signed in.</div>
+            )}
 
             <div style={styles.divider} />
 

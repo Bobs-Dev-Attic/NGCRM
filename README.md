@@ -31,13 +31,19 @@ Agent loop  (lib/ai/agent.ts)
 - **Database** — Neon Postgres (`db/schema.sql`): contacts, households,
   campaigns, donations, goals, tasks, `request_history`, and `orgs`.
   `db:migrate` is idempotent — re-run it after pulling schema changes.
+- **Auth** — email + password accounts (`users` table). Passwords hashed with
+  scrypt (`lib/password.ts`); sessions are HMAC-signed HttpOnly cookies
+  (`lib/auth.ts`, Web Crypto so edge middleware can verify them). `middleware.ts`
+  redirects unauthenticated visitors to `/login`; the data routes return 401.
+  Requires `AUTH_SECRET` in the environment.
 - **Access control** — enforced by Postgres **Row-Level Security**, not by the
-  agent. Each request sets an identity (org + role) as session GUCs; RLS policies
-  filter every query the agent's tools run, so the model can never return rows the
-  current user isn't allowed to see. A demo role switch (Settings → Profiles) shows
-  it: as `volunteer`, records tagged `restricted` (e.g. board / major donors)
-  vanish from counts and lists. See `lib/db.ts` (per-request scoped client) and the
-  policies at the end of `db/schema.sql`. The role here stands in for real auth.
+  agent. Each request derives its identity (org + role) from the **verified
+  session**, sets it as session GUCs, and RLS policies filter every query the
+  agent's tools run — so the model can never return rows the signed-in user isn't
+  allowed to see. Sign in as `volunteer@demo.org` vs `staff@demo.org` (seeded,
+  password `demo1234`): the volunteer cannot see `restricted` records (board /
+  major donors). See `lib/db.ts` (per-request scoped client) and the policies at
+  the end of `db/schema.sql`.
 
 ## Getting started
 
