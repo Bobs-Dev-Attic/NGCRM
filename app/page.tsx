@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { loadSettings, hasUsableKey } from "@/lib/settings";
 import { estimateCostUSD, formatUSD } from "@/lib/pricing";
 import { Logo } from "@/components/Logo";
@@ -54,6 +55,17 @@ export default function Home() {
   const [display, setDisplay] = useState({ showTokens: true, showCost: true });
   const [recent, setRecent] = useState<HistoryItem[]>([]);
   const [rating, setRating] = useState<number | null>(null);
+  const [me, setMe] = useState<{ email: string; role: string } | null>(null);
+  const router = useRouter();
+
+  async function logout() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      /* ignore */
+    }
+    router.replace("/login");
+  }
 
   async function refreshRecent() {
     try {
@@ -70,6 +82,10 @@ export default function Home() {
     setKeyConfigured(hasUsableKey(s));
     setDisplay({ showTokens: s.showTokens ?? true, showCost: s.showCost ?? true });
     refreshRecent();
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setMe(d?.user ?? null))
+      .catch(() => setMe(null));
   }, []);
 
   async function rate(value: number) {
@@ -99,10 +115,7 @@ export default function Home() {
     try {
       const res = await fetch("/api/agent", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-ngcrm-role": settings.demoRole || "staff",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ intent: value, config: settings }),
       });
       const data = await res.json();
@@ -120,9 +133,19 @@ export default function Home() {
     <main style={styles.main}>
       <div style={styles.container}>
         <div style={styles.topbar}>
+          {me && (
+            <span style={styles.who}>
+              {me.email} · {me.role}
+            </span>
+          )}
           <Link href="/settings" style={styles.settingsLink}>
             ⚙ Settings
           </Link>
+          {me && (
+            <button type="button" onClick={logout} style={styles.logout}>
+              Log out
+            </button>
+          )}
         </div>
 
         <header style={styles.header}>
@@ -295,8 +318,17 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "8vh 20px 60px",
   },
   container: { width: "100%", maxWidth: 720 },
-  topbar: { display: "flex", justifyContent: "flex-end", marginBottom: 8 },
+  topbar: { display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 14, marginBottom: 8 },
+  who: { fontSize: 12.5, color: "var(--muted)", marginRight: "auto" },
   settingsLink: { fontSize: 13, color: "var(--muted)", textDecoration: "none" },
+  logout: {
+    fontSize: 13,
+    color: "var(--muted)",
+    background: "transparent",
+    border: "none",
+    cursor: "pointer",
+    padding: 0,
+  },
   banner: {
     marginTop: 18,
     padding: "10px 14px",

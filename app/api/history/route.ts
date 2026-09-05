@@ -11,6 +11,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const limit = Number(searchParams.get("limit")) || 10;
   const ctx = await contextFromRequest(req);
+  if (!ctx) return NextResponse.json({ items: [] }, { status: 401 });
   return runWithContext(ctx, async () => {
     try {
       const items = await listHistory(limit);
@@ -24,6 +25,7 @@ export async function GET(req: Request) {
 /** POST /api/history { id, rating } → record thumbs up/down. */
 export async function POST(req: Request) {
   const ctx = await contextFromRequest(req);
+  if (!ctx) return NextResponse.json({ error: "Please sign in." }, { status: 401 });
   return runWithContext(ctx, async () => {
     try {
       const body = await req.json();

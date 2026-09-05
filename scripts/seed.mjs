@@ -2,7 +2,14 @@
 // Usage: node scripts/seed.mjs   (run after db:migrate)
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { scryptSync, randomBytes } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
+
+function hashPassword(pw) {
+  const salt = randomBytes(16);
+  const key = scryptSync(pw, salt, 64);
+  return `${salt.toString("hex")}:${key.toString("hex")}`;
+}
 
 loadEnvLocal();
 
@@ -51,6 +58,21 @@ await sql`
   INSERT INTO campaigns (name, event_date, goal_amount, status, org_id)
   VALUES ('Spring Gala 2026', '2026-04-18', 50000, 'draft', ${orgId})
 `;
+
+// Demo users so the role-based RLS is testable by logging in. Password: demo1234
+const demoUsers = [
+  ["admin@demo.org", "admin"],
+  ["staff@demo.org", "staff"],
+  ["volunteer@demo.org", "volunteer"],
+];
+console.log("Seeding demo users (password: demo1234)…");
+for (const [email, role] of demoUsers) {
+  await sql`
+    INSERT INTO users (org_id, email, password_hash, role)
+    VALUES (${orgId}, ${email}, ${hashPassword("demo1234")}, ${role})
+    ON CONFLICT (email) DO NOTHING
+  `;
+}
 
 console.log("✓ Seed complete.");
 
