@@ -38,8 +38,11 @@ export default function SettingsPage() {
 
   // Provider settings
   const [s, setS] = useState<ClientSettings>(DEFAULT_SETTINGS);
-  const [saved, setSaved] = useState(false);
+  const [, setSaved] = useState(false);
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
 
   // Profile
   const [profile, setProfile] = useState<WorkingStyle | null>(null);
@@ -99,30 +102,47 @@ export default function SettingsPage() {
       workspaceId: p.transport === "anthropic" ? undefined : "",
     } as Partial<ProviderEntry>);
   }
+  // Table actions persist immediately (discrete, single-click changes).
+  function persist(next: ProviderEntry[]) {
+    const ns = { ...s, providers: next };
+    setS(ns);
+    saveSettings(ns);
+    setSaved(true);
+  }
   function addProvider() {
-    setProviders([...s.providers, makeEntry("anthropic")]);
+    const entry = makeEntry("anthropic");
+    persist([...s.providers, entry]);
+    setEditId(entry.id); // open the editor for the new provider
+    setMenuOpenId(null);
   }
   function removeProvider(id: string) {
-    setProviders(s.providers.filter((e) => e.id !== id));
+    persist(s.providers.filter((e) => e.id !== id));
+    setMenuOpenId(null);
   }
-  function moveProvider(id: string, dir: -1 | 1) {
-    const i = s.providers.findIndex((e) => e.id === id);
-    const j = i + dir;
-    if (i < 0 || j < 0 || j >= s.providers.length) return;
-    const next = [...s.providers];
-    [next[i], next[j]] = [next[j], next[i]];
-    setProviders(next);
+  function toggleEnabled(id: string) {
+    persist(s.providers.map((e) => (e.id === id ? { ...e, enabled: !e.enabled } : e)));
+    setMenuOpenId(null);
+  }
+  function reorder(from: number, to: number) {
+    if (from === to || from < 0 || to < 0) return;
+    const arr = [...s.providers];
+    const [moved] = arr.splice(from, 1);
+    arr.splice(to, 0, moved);
+    persist(arr);
   }
   function resetUsage(id: string) {
     updateEntry(id, { usedTokens: 0 });
   }
-  function onSave() {
-    saveSettings(s);
+  function onDoneEdit() {
+    saveSettings(s); // persist the entry's edits made in the modal
     setSaved(true);
+    setEditId(null);
   }
   function onClear() {
     clearSettings();
     setS(loadSettings());
+    setEditId(null);
+    setMenuOpenId(null);
     setSaved(false);
   }
 
@@ -255,52 +275,135 @@ export default function SettingsPage() {
             <p style={styles.chainIntro}>
               Providers are tried <strong>top to bottom</strong>. If one errors (e.g. out of credit)
               or reaches its usage threshold, the agent falls through to the next enabled provider.
-              Drag priority with the ▲▼ arrows.
+              Drag a row to reorder; use the ⋯ menu to edit, toggle, or delete.
             </p>
 
-            {s.providers.map((e, i) => {
-              const p = getPreset(e.preset);
-              const isAnthropic = p.transport === "anthropic";
-              const overThreshold = e.thresholdTokens > 0 && e.usedTokens >= e.thresholdTokens;
-              return (
-                <div key={e.id} style={styles.card}>
-                  <div style={styles.entryHead}>
-                    <span style={styles.entryNum}>{i + 1}</span>
-                    <label style={styles.entryToggle}>
-                      <input
-                        type="checkbox"
-                        checked={e.enabled}
-                        onChange={(ev) => updateEntry(e.id, { enabled: ev.target.checked })}
+            <div style={styles.tableCard}>
+              {s.providers.map((e, i) => {
+                const p = getPreset(e.preset);
+                const overThreshold = e.thresholdTokens > 0 && e.usedTokens >= e.thresholdTokens;
+                const dragging = dragIndex === i;
+                return (
+                  <div
+                    key={e.id}
+                    draggable
+                    onDragStart={() => setDragIndex(i)}
+                    onDragOver={(ev) => ev.preventDefault()}
+                    onDrop={() => {
+                      if (dragIndex !== null) reorder(dragIndex, i);
+                      setDragIndex(null);
+                    }}
+                    onDragEnd={() => setDragIndex(null)}
+                    style={{
+                      ...styles.row,
+                      ...(dragging ? styles.rowDragging : {}),
+                      ...(e.enabled ? {} : styles.rowDisabled),
+                    }}
+                  >
+                    <span style={styles.dragHandle} title="Drag to reorder">
+                      ⠿
+                    </span>
+                    <span style={styles.rowNum}>{i + 1}</span>
+                    <div style={styles.rowMain}>
+                      <div style={styles.rowName}>
+                        {p.label}
+                        {p.local ? <span style={styles.localTag}>local</span> : null}
+                      </div>
+                      <div style={styles.rowSub}>{e.model || p.defaultModel}</div>
+                    </div>
+                    <div style={styles.rowStatus}>
+                      <span
+                        style={{
+                          ...styles.dot,
+                          background: e.enabled ? "var(--ok)" : "var(--muted)",
+                        }}
                       />
-                      Enabled
-                    </label>
-                    {overThreshold && <span style={styles.overTag}>threshold reached</span>}
-                    <span style={{ flex: 1 }} />
-                    <button
-                      type="button"
-                      style={styles.iconBtn}
-                      onClick={() => moveProvider(e.id, -1)}
-                      disabled={i === 0}
-                      aria-label="Move up"
-                    >
-                      ▲
-                    </button>
-                    <button
-                      type="button"
-                      style={styles.iconBtn}
-                      onClick={() => moveProvider(e.id, 1)}
-                      disabled={i === s.providers.length - 1}
-                      aria-label="Move down"
-                    >
-                      ▼
-                    </button>
-                    <button
-                      type="button"
-                      style={styles.iconBtn}
-                      onClick={() => removeProvider(e.id)}
-                      disabled={s.providers.length <= 1}
-                      aria-label="Remove"
-                    >
+                      {e.enabled ? "On" : "Off"}
+                      {overThreshold && <span style={styles.overTag}>over</span>}
+                    </div>
+                    <div style={styles.rowUsed}>
+                      {e.usedTokens.toLocaleString()}
+                      {e.thresholdTokens > 0 ? ` / ${e.thresholdTokens.toLocaleString()}` : ""} tok
+                    </div>
+                    <div style={styles.menuWrap}>
+                      <button
+                        type="button"
+                        style={styles.ellipsis}
+                        onClick={() => setMenuOpenId(menuOpenId === e.id ? null : e.id)}
+                        aria-label="Provider options"
+                      >
+                        ⋯
+                      </button>
+                      {menuOpenId === e.id && (
+                        <div style={styles.menu}>
+                          <button
+                            type="button"
+                            style={styles.menuItem}
+                            onClick={() => {
+                              setEditId(e.id);
+                              setMenuOpenId(null);
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            style={styles.menuItem}
+                            onClick={() => toggleEnabled(e.id)}
+                          >
+                            {e.enabled ? "Turn off" : "Turn on"}
+                          </button>
+                          <button
+                            type="button"
+                            style={{ ...styles.menuItem, color: "#d9534f" }}
+                            onClick={() => removeProvider(e.id)}
+                            disabled={s.providers.length <= 1}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {menuOpenId && (
+              <div style={styles.backdrop} onClick={() => setMenuOpenId(null)} aria-hidden />
+            )}
+
+            <div style={styles.chainActions}>
+              <button type="button" style={styles.addBtn} onClick={addProvider}>
+                + Add provider
+              </button>
+              <span style={{ flex: 1 }} />
+              <button type="button" style={styles.clear} onClick={onClear}>
+                Reset all
+              </button>
+            </div>
+
+            <p style={styles.note}>
+              Keys are stored only in this browser and sent with each request — never saved on the
+              server. Usage is tracked per provider here; a provider past its token threshold is
+              skipped until you raise the limit or reset its counter.
+            </p>
+          </>
+        )}
+
+        {/* ---------- PROVIDER EDIT MODAL ---------- */}
+        {editId &&
+          (() => {
+            const e = s.providers.find((x) => x.id === editId);
+            if (!e) return null;
+            const p = getPreset(e.preset);
+            const isAnthropic = p.transport === "anthropic";
+            return (
+              <div style={styles.modalBackdrop} onClick={() => onDoneEdit()}>
+                <div style={styles.modal} onClick={(ev) => ev.stopPropagation()}>
+                  <div style={styles.modalHead}>
+                    <div style={styles.fieldLabel}>Edit provider</div>
+                    <button type="button" style={styles.iconBtn} onClick={() => onDoneEdit()}>
                       ✕
                     </button>
                   </div>
@@ -414,30 +517,16 @@ export default function SettingsPage() {
                       </button>
                     </div>
                   </div>
+
+                  <div style={styles.actions}>
+                    <button type="button" style={styles.save} onClick={() => onDoneEdit()}>
+                      Done
+                    </button>
+                  </div>
                 </div>
-              );
-            })}
-
-            <div style={styles.chainActions}>
-              <button type="button" style={styles.addBtn} onClick={addProvider}>
-                + Add provider
-              </button>
-              <span style={{ flex: 1 }} />
-              <button type="button" style={styles.save} onClick={onSave}>
-                {saved ? "Saved ✓" : "Save"}
-              </button>
-              <button type="button" style={styles.clear} onClick={onClear}>
-                Reset
-              </button>
-            </div>
-
-            <p style={styles.note}>
-              Keys are stored only in this browser and sent with each request — never saved on the
-              server. Usage is tracked per provider in this browser; when a provider passes its token
-              threshold it&apos;s skipped until you raise the limit or reset its counter.
-            </p>
-          </>
-        )}
+              </div>
+            );
+          })()}
 
         {/* ---------- THEME ---------- */}
         {tab === "theme" && (
@@ -701,6 +790,114 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
   },
   note: { fontSize: 13, color: "var(--muted)", lineHeight: 1.6, marginTop: 18 },
+
+  // provider table
+  tableCard: {
+    background: "var(--card)",
+    border: "1px solid var(--border)",
+    borderRadius: 16,
+    boxShadow: "var(--shadow)",
+    overflow: "visible",
+  },
+  row: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "10px 14px",
+    borderBottom: "1px solid var(--border)",
+    cursor: "grab",
+  },
+  rowDragging: { opacity: 0.5 },
+  rowDisabled: { opacity: 0.55 },
+  dragHandle: { color: "var(--muted)", fontSize: 16, cursor: "grab", userSelect: "none" },
+  rowNum: {
+    width: 20,
+    height: 20,
+    borderRadius: 999,
+    background: "var(--accent)",
+    color: "var(--accent-fg)",
+    fontSize: 11,
+    fontWeight: 700,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  rowMain: { flex: 1, minWidth: 0 },
+  rowName: { fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 },
+  rowSub: {
+    fontSize: 12,
+    color: "var(--muted)",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  rowStatus: { display: "flex", alignItems: "center", gap: 5, fontSize: 12.5, color: "var(--muted)" },
+  dot: { width: 8, height: 8, borderRadius: 999, display: "inline-block" },
+  rowUsed: {
+    fontSize: 12,
+    color: "var(--muted)",
+    fontVariantNumeric: "tabular-nums",
+    minWidth: 96,
+    textAlign: "right",
+  },
+  menuWrap: { position: "relative" },
+  ellipsis: {
+    border: "none",
+    background: "transparent",
+    color: "var(--fg)",
+    fontSize: 20,
+    lineHeight: 1,
+    cursor: "pointer",
+    padding: "2px 8px",
+    borderRadius: 8,
+  },
+  menu: {
+    position: "absolute",
+    right: 0,
+    top: "100%",
+    marginTop: 4,
+    background: "var(--card)",
+    border: "1px solid var(--border)",
+    borderRadius: 10,
+    boxShadow: "var(--shadow)",
+    zIndex: 60,
+    minWidth: 130,
+    overflow: "hidden",
+    display: "flex",
+    flexDirection: "column",
+  },
+  menuItem: {
+    background: "transparent",
+    border: "none",
+    textAlign: "left",
+    padding: "9px 14px",
+    fontSize: 13,
+    color: "var(--fg)",
+    cursor: "pointer",
+  },
+  backdrop: { position: "fixed", inset: 0, zIndex: 40 },
+  modalBackdrop: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.45)",
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "center",
+    padding: "6vh 16px",
+    zIndex: 70,
+    overflowY: "auto",
+  },
+  modal: {
+    width: "100%",
+    maxWidth: 520,
+    background: "var(--card)",
+    border: "1px solid var(--border)",
+    borderRadius: 16,
+    padding: 20,
+    boxShadow: "var(--shadow)",
+  },
+  modalHead: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
 
   // theme picker
   themeGrid: {

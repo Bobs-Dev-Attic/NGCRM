@@ -7,6 +7,13 @@ exact Git commit (on Vercel deploys).
 This project uses loose semantic versioning while pre-1.0: minor bumps for
 features, patch bumps for fixes.
 
+## 0.11.1 — Providers table UI
+- Settings → Providers is now a compact table: one row per provider (name,
+  model, on/off, used/threshold). Reorder by drag & drop; a ⋯ row menu has
+  Edit / Turn on-off / Delete. Editing opens a modal with the full form.
+- Table actions (toggle, delete, reorder, add) persist immediately; the old
+  stacked forms and ▲▼ buttons are gone. No behavior change to failover.
+
 ## 0.11.0 — Provider failover chain
 - Settings → Providers is now an ordered list of providers (add any number,
   reorder, enable/disable). Each has a **retry count** and a **token threshold**
