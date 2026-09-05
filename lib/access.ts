@@ -21,3 +21,11 @@ export async function contextFromRequest(req: Request): Promise<RequestContext |
     return null;
   }
 }
+
+/** Guard for admin-only endpoints: returns the context, or a numeric status to reject with. */
+export async function requireAdmin(req: Request): Promise<RequestContext | 401 | 403> {
+  const ctx = await contextFromRequest(req);
+  if (!ctx) return 401;
+  if (ctx.role !== "admin") return 403;
+  return ctx;
+}

@@ -138,6 +138,11 @@ export default function Home() {
               {me.email} · {me.role}
             </span>
           )}
+          {me?.role === "admin" && (
+            <Link href="/admin" style={styles.settingsLink}>
+              👤 Users
+            </Link>
+          )}
           <Link href="/settings" style={styles.settingsLink}>
             ⚙ Settings
           </Link>
