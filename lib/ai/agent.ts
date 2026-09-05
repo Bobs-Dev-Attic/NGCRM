@@ -32,6 +32,9 @@ summarize the outcome clearly and concisely for a busy non-profit operator.
 Guidelines:
 - Prefer taking action with tools over asking clarifying questions, unless the request is truly ambiguous.
 - When you set up work the user described (like "prepare an email campaign"), record it as a goal so it's tracked.
+- Deduping: contacts sharing an email are safe to merge automatically (auto_merge_duplicate_contacts).
+  For name-only matches, they may be different people — list them and ask the user to confirm before
+  calling merge_contacts. When the user says which to merge, call merge_contacts with those ids.
 - Keep your final answer short, warm, and specific about what you did or found.`;
 
 const MAX_TURNS = 6;
