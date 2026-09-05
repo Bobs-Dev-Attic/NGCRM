@@ -87,6 +87,13 @@ There are two ways to tell the agent which provider/model/key to use:
 
 Per-request browser config always takes precedence over the server env.
 
+**Failover chain.** Settings → Providers is an ordered list. The agent tries
+providers top-to-bottom, retrying transient errors up to each provider's retry
+count and falling through to the next when one errors (out of credit, auth,
+quota, missing model) or passes its per-provider token threshold. Usage is
+tracked per provider in the browser; the home page shows when a request failed
+over.
+
 ## Supported providers
 
 The Settings page offers presets; all non-Anthropic providers share one

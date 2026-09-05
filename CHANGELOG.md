@@ -7,6 +7,18 @@ exact Git commit (on Vercel deploys).
 This project uses loose semantic versioning while pre-1.0: minor bumps for
 features, patch bumps for fixes.
 
+## 0.11.0 — Provider failover chain
+- Settings → Providers is now an ordered list of providers (add any number,
+  reorder, enable/disable). Each has a **retry count** and a **token threshold**
+  (0 = unlimited) with a per-provider usage counter.
+- The agent tries providers top-to-bottom: retries transient errors up to the
+  retry count, and falls through to the next provider on a fatal error (auth,
+  out of credit, quota, missing model) or once a provider passes its threshold.
+- `FailoverProvider` (`lib/ai/provider.ts`) wraps the chain and reports which
+  provider served + any failovers; the home meta line shows "⤳ failed over N×".
+- Per-provider usage is tracked in the browser and drives the thresholds.
+- No migration.
+
 ## 0.10.0 — Auto-build households
 - `auto_build_households` agent tool: groups contacts sharing a last name +
   locality into households ("The <Last> Household") and assigns members;
