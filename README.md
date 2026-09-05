@@ -29,9 +29,15 @@ Agent loop  (lib/ai/agent.ts)
 - **Tools** — each CRM capability is one tool in `lib/ai/tools.ts`. Adding a
   feature = adding a tool; the UI and agent loop don't change.
 - **Database** — Neon Postgres (`db/schema.sql`): contacts, households,
-  campaigns, donations, goals, tasks, and `request_history` (every intent +
-  result + usage + feedback). `db:migrate` is idempotent — re-run it after
-  pulling schema changes to add new tables.
+  campaigns, donations, goals, tasks, `request_history`, and `orgs`.
+  `db:migrate` is idempotent — re-run it after pulling schema changes.
+- **Access control** — enforced by Postgres **Row-Level Security**, not by the
+  agent. Each request sets an identity (org + role) as session GUCs; RLS policies
+  filter every query the agent's tools run, so the model can never return rows the
+  current user isn't allowed to see. A demo role switch (Settings → Profiles) shows
+  it: as `volunteer`, records tagged `restricted` (e.g. board / major donors)
+  vanish from counts and lists. See `lib/db.ts` (per-request scoped client) and the
+  policies at the end of `db/schema.sql`. The role here stands in for real auth.
 
 ## Getting started
 

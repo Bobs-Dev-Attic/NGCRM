@@ -112,3 +112,96 @@ CREATE TABLE IF NOT EXISTS campaign_drafts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_campaign_drafts_campaign ON campaign_drafts (campaign_id);
+
+-- ============================================================================
+-- Access control: organizations (tenants) + Row-Level Security.
+-- Authorization is enforced HERE, below the agent. Each request sets the
+-- session GUCs app.org_id / app.role; policies read them via app_org()/app_role().
+-- "No identity set" (app_org() IS NULL) is treated as a trusted server path
+-- (migrations, seeds) so those keep working; the app always sets an identity.
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS orgs (
+  id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  name        TEXT NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+INSERT INTO orgs (name) SELECT 'Demo Organization' WHERE NOT EXISTS (SELECT 1 FROM orgs);
+
+-- Add org_id to every tenant-scoped table; contacts also get a sensitivity tag.
+ALTER TABLE contacts        ADD COLUMN IF NOT EXISTS org_id BIGINT;
+ALTER TABLE contacts        ADD COLUMN IF NOT EXISTS sensitivity TEXT NOT NULL DEFAULT 'normal';
+ALTER TABLE donations       ADD COLUMN IF NOT EXISTS org_id BIGINT;
+ALTER TABLE campaigns       ADD COLUMN IF NOT EXISTS org_id BIGINT;
+ALTER TABLE goals           ADD COLUMN IF NOT EXISTS org_id BIGINT;
+ALTER TABLE tasks           ADD COLUMN IF NOT EXISTS org_id BIGINT;
+ALTER TABLE campaign_drafts ADD COLUMN IF NOT EXISTS org_id BIGINT;
+ALTER TABLE request_history ADD COLUMN IF NOT EXISTS org_id BIGINT;
+
+-- Backfill existing rows to the default org (before RLS is forced).
+UPDATE contacts        SET org_id = (SELECT min(id) FROM orgs) WHERE org_id IS NULL;
+UPDATE donations       SET org_id = (SELECT min(id) FROM orgs) WHERE org_id IS NULL;
+UPDATE campaigns       SET org_id = (SELECT min(id) FROM orgs) WHERE org_id IS NULL;
+UPDATE goals           SET org_id = (SELECT min(id) FROM orgs) WHERE org_id IS NULL;
+UPDATE tasks           SET org_id = (SELECT min(id) FROM orgs) WHERE org_id IS NULL;
+UPDATE campaign_drafts SET org_id = (SELECT min(id) FROM orgs) WHERE org_id IS NULL;
+UPDATE request_history SET org_id = (SELECT min(id) FROM orgs) WHERE org_id IS NULL;
+
+-- New rows adopt the session's org automatically (from the GUC set per request).
+ALTER TABLE contacts        ALTER COLUMN org_id SET DEFAULT nullif(current_setting('app.org_id', true), '')::bigint;
+ALTER TABLE donations       ALTER COLUMN org_id SET DEFAULT nullif(current_setting('app.org_id', true), '')::bigint;
+ALTER TABLE campaigns       ALTER COLUMN org_id SET DEFAULT nullif(current_setting('app.org_id', true), '')::bigint;
+ALTER TABLE goals           ALTER COLUMN org_id SET DEFAULT nullif(current_setting('app.org_id', true), '')::bigint;
+ALTER TABLE tasks           ALTER COLUMN org_id SET DEFAULT nullif(current_setting('app.org_id', true), '')::bigint;
+ALTER TABLE campaign_drafts ALTER COLUMN org_id SET DEFAULT nullif(current_setting('app.org_id', true), '')::bigint;
+ALTER TABLE request_history ALTER COLUMN org_id SET DEFAULT nullif(current_setting('app.org_id', true), '')::bigint;
+
+-- Demo: treat board members as restricted (major-donor-style records).
+UPDATE contacts SET sensitivity = 'restricted' WHERE 'board' = ANY(tags) AND sensitivity = 'normal';
+
+-- Identity accessors used by policies.
+CREATE OR REPLACE FUNCTION app_org() RETURNS bigint LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('app.org_id', true), '')::bigint $$;
+CREATE OR REPLACE FUNCTION app_role() RETURNS text LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('app.role', true), '') $$;
+
+-- Contacts: org isolation + sensitivity (restricted rows need admin/staff).
+ALTER TABLE contacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contacts FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS contacts_select ON contacts;
+CREATE POLICY contacts_select ON contacts FOR SELECT USING (app_org() IS NULL OR (org_id = app_org() AND (sensitivity <> 'restricted' OR app_role() IN ('admin', 'staff'))));
+DROP POLICY IF EXISTS contacts_insert ON contacts;
+CREATE POLICY contacts_insert ON contacts FOR INSERT WITH CHECK (app_org() IS NULL OR org_id = app_org());
+DROP POLICY IF EXISTS contacts_update ON contacts;
+CREATE POLICY contacts_update ON contacts FOR UPDATE USING (app_org() IS NULL OR org_id = app_org()) WITH CHECK (app_org() IS NULL OR org_id = app_org());
+DROP POLICY IF EXISTS contacts_delete ON contacts;
+CREATE POLICY contacts_delete ON contacts FOR DELETE USING (app_org() IS NULL OR org_id = app_org());
+
+-- Other tenant tables: org isolation only.
+ALTER TABLE donations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE donations FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS donations_all ON donations;
+CREATE POLICY donations_all ON donations FOR ALL USING (app_org() IS NULL OR org_id = app_org()) WITH CHECK (app_org() IS NULL OR org_id = app_org());
+
+ALTER TABLE campaigns ENABLE ROW LEVEL SECURITY;
+ALTER TABLE campaigns FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS campaigns_all ON campaigns;
+CREATE POLICY campaigns_all ON campaigns FOR ALL USING (app_org() IS NULL OR org_id = app_org()) WITH CHECK (app_org() IS NULL OR org_id = app_org());
+
+ALTER TABLE goals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE goals FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS goals_all ON goals;
+CREATE POLICY goals_all ON goals FOR ALL USING (app_org() IS NULL OR org_id = app_org()) WITH CHECK (app_org() IS NULL OR org_id = app_org());
+
+ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tasks FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tasks_all ON tasks;
+CREATE POLICY tasks_all ON tasks FOR ALL USING (app_org() IS NULL OR org_id = app_org()) WITH CHECK (app_org() IS NULL OR org_id = app_org());
+
+ALTER TABLE campaign_drafts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE campaign_drafts FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS campaign_drafts_all ON campaign_drafts;
+CREATE POLICY campaign_drafts_all ON campaign_drafts FOR ALL USING (app_org() IS NULL OR org_id = app_org()) WITH CHECK (app_org() IS NULL OR org_id = app_org());
+
+ALTER TABLE request_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE request_history FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS request_history_all ON request_history;
+CREATE POLICY request_history_all ON request_history FOR ALL USING (app_org() IS NULL OR org_id = app_org()) WITH CHECK (app_org() IS NULL OR org_id = app_org());

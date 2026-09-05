@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { runAgent } from "@/lib/ai/agent";
 import { saveRequest } from "@/lib/history";
+import { runWithContext } from "@/lib/db";
+import { contextFromRequest } from "@/lib/access";
 import type { ProviderConfig } from "@/lib/ai/types";
 
 // The agent uses the Node.js runtime (SDKs + DB pooling), not Edge.
@@ -37,15 +39,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Please describe what you need to get done." }, { status: 400 });
   }
 
-  try {
-    // Note: config may carry a user's API key (bring-your-own-key). It is used
-    // transiently for this request only and never logged or persisted.
-    const result = await runAgent(intent, config);
-    // Log to history (best-effort). The returned id lets the UI attach feedback.
-    const historyId = await saveRequest(intent, result);
-    return NextResponse.json({ ...result, historyId });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Something went wrong.";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+  // Establish the access identity for this request; every DB call the agent
+  // makes is scoped to it via RLS.
+  const ctx = await contextFromRequest(req);
+
+  return runWithContext(ctx, async () => {
+    try {
+      const result = await runAgent(intent, config);
+      const historyId = await saveRequest(intent, result);
+      return NextResponse.json({ ...result, historyId, role: ctx.role });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Something went wrong.";
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
+  });
 }

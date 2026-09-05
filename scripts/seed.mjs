@@ -27,17 +27,29 @@ const contacts = [
   ["Sofia", "Reyes", "sofia.reyes@example.org", "78701", "Austin", ["prospect"]],
 ];
 
+// Resolve the default org so seeded rows are visible under RLS (the app scopes
+// by org). Falls back to null if the orgs table isn't present yet.
+let orgId = null;
+try {
+  const rows = await sql`SELECT min(id)::int AS id FROM orgs`;
+  orgId = rows[0]?.id ?? null;
+} catch {
+  orgId = null;
+}
+
 console.log(`Seeding ${contacts.length} contacts…`);
 for (const [first, last, email, zip, city, tags] of contacts) {
+  // Board members are marked restricted to demo sensitivity-based RLS.
+  const sensitivity = tags.includes("board") ? "restricted" : "normal";
   await sql`
-    INSERT INTO contacts (first_name, last_name, email, postal_code, city, tags, source)
-    VALUES (${first}, ${last}, ${email}, ${zip}, ${city}, ${tags}, 'seed')
+    INSERT INTO contacts (first_name, last_name, email, postal_code, city, tags, source, org_id, sensitivity)
+    VALUES (${first}, ${last}, ${email}, ${zip}, ${city}, ${tags}, 'seed', ${orgId}, ${sensitivity})
   `;
 }
 
 await sql`
-  INSERT INTO campaigns (name, event_date, goal_amount, status)
-  VALUES ('Spring Gala 2026', '2026-04-18', 50000, 'draft')
+  INSERT INTO campaigns (name, event_date, goal_amount, status, org_id)
+  VALUES ('Spring Gala 2026', '2026-04-18', 50000, 'draft', ${orgId})
 `;
 
 console.log("✓ Seed complete.");
