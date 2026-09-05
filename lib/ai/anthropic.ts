@@ -21,7 +21,17 @@ export class AnthropicProvider implements LLMProvider {
       );
     }
     this.model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
-    this.client = new Anthropic({ apiKey });
+
+    // Organization-level API keys must name a workspace. If ANTHROPIC_WORKSPACE_ID
+    // is set, pass it as a default header so org-scoped keys work; workspace-scoped
+    // keys don't need it and the header is simply omitted.
+    const workspaceId = process.env.ANTHROPIC_WORKSPACE_ID;
+    this.client = new Anthropic({
+      apiKey,
+      ...(workspaceId
+        ? { defaultHeaders: { "anthropic-workspace-id": workspaceId } }
+        : {}),
+    });
   }
 
   async complete(
