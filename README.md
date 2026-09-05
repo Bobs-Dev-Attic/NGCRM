@@ -31,6 +31,9 @@ Agent loop  (lib/ai/agent.ts)
 - **Database** — Neon Postgres (`db/schema.sql`): contacts, households,
   campaigns, donations, goals, tasks, `request_history`, and `orgs`.
   `db:migrate` is idempotent — re-run it after pulling schema changes.
+- **Admin** — admins get a `/admin` user-management page: list users, add users
+  with a role, change roles, and remove users — scoped to their org and enforced
+  server-side (`app/api/admin/users`). The last admin can't be demoted or removed.
 - **Auth** — email + password accounts (`users` table). Passwords hashed with
   scrypt (`lib/password.ts`); sessions are HMAC-signed HttpOnly cookies
   (`lib/auth.ts`, Web Crypto so edge middleware can verify them). `middleware.ts`
