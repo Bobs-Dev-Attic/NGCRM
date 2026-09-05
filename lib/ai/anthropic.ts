@@ -3,6 +3,7 @@ import type {
   AgentTool,
   LLMProvider,
   Message,
+  ProviderConfig,
   ProviderResponse,
   ToolCall,
 } from "./types";
@@ -13,19 +14,20 @@ export class AnthropicProvider implements LLMProvider {
   readonly model: string;
   private client: Anthropic;
 
-  constructor() {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+  constructor(config: ProviderConfig = {}) {
+    // Per-request config (bring-your-own-key) wins; otherwise fall back to env.
+    const apiKey = config.apiKey || process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       throw new Error(
-        "ANTHROPIC_API_KEY is not set. Add it to .env.local (see .env.example)."
+        "No Anthropic API key. Set one on the Settings page, or add ANTHROPIC_API_KEY to the server env."
       );
     }
-    this.model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
+    this.model = config.model || process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
 
-    // Organization-level API keys must name a workspace. If ANTHROPIC_WORKSPACE_ID
-    // is set, pass it as a default header so org-scoped keys work; workspace-scoped
+    // Organization-level API keys must name a workspace. If a workspace id is
+    // provided (config or env), pass it as a default header; workspace-scoped
     // keys don't need it and the header is simply omitted.
-    const workspaceId = process.env.ANTHROPIC_WORKSPACE_ID;
+    const workspaceId = config.workspaceId || process.env.ANTHROPIC_WORKSPACE_ID;
     this.client = new Anthropic({
       apiKey,
       ...(workspaceId

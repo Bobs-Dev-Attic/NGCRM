@@ -2,6 +2,7 @@ import type {
   AgentTool,
   LLMProvider,
   Message,
+  ProviderConfig,
   ProviderResponse,
   ToolCall,
 } from "./types";
@@ -20,13 +21,15 @@ export class OpenAICompatibleProvider implements LLMProvider {
   private baseUrl: string;
   private apiKey: string;
 
-  constructor() {
-    this.baseUrl = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(
-      /\/$/,
-      ""
-    );
-    this.apiKey = process.env.OPENAI_API_KEY || "";
-    this.model = process.env.OPENAI_MODEL || "gpt-4o";
+  constructor(config: ProviderConfig = {}) {
+    // Per-request config (bring-your-own-key) wins; otherwise fall back to env.
+    this.baseUrl = (
+      config.baseUrl ||
+      process.env.OPENAI_BASE_URL ||
+      "https://api.openai.com/v1"
+    ).replace(/\/$/, "");
+    this.apiKey = config.apiKey || process.env.OPENAI_API_KEY || "";
+    this.model = config.model || process.env.OPENAI_MODEL || "gpt-4o";
   }
 
   async complete(

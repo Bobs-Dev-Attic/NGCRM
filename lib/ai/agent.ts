@@ -1,6 +1,6 @@
 import { getProvider } from "./provider";
 import { tools, getToolByName } from "./tools";
-import type { Message } from "./types";
+import type { Message, ProviderConfig } from "./types";
 
 export type AgentStep = {
   type: "text" | "tool";
@@ -40,8 +40,11 @@ const MAX_TURNS = 6;
  * Runs the intent-to-action loop: the model plans, calls CRM tools, sees the
  * results, and iterates until it produces a final answer (or hits MAX_TURNS).
  */
-export async function runAgent(userIntent: string): Promise<AgentResult> {
-  const provider = getProvider();
+export async function runAgent(
+  userIntent: string,
+  config: ProviderConfig = {}
+): Promise<AgentResult> {
+  const provider = getProvider(config);
   const messages: Message[] = [{ role: "user", content: userIntent }];
   const steps: AgentStep[] = [];
   let answer = "";

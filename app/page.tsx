@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { loadSettings, hasUsableKey } from "@/lib/settings";
 
 type AgentStep = {
   type: "text" | "tool";
@@ -29,6 +31,11 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AgentResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [keyConfigured, setKeyConfigured] = useState(true);
+
+  useEffect(() => {
+    setKeyConfigured(hasUsableKey(loadSettings()));
+  }, []);
 
   async function submit(text: string) {
     const value = text.trim();
@@ -40,7 +47,7 @@ export default function Home() {
       const res = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ intent: value }),
+        body: JSON.stringify({ intent: value, config: loadSettings() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Request failed");
@@ -55,10 +62,26 @@ export default function Home() {
   return (
     <main style={styles.main}>
       <div style={styles.container}>
+        <div style={styles.topbar}>
+          <Link href="/settings" style={styles.settingsLink}>
+            ⚙ Settings
+          </Link>
+        </div>
+
         <header style={styles.header}>
           <div style={styles.logo}>Next-Gen CRM</div>
           <h1 style={styles.prompt}>What do you need to get done today?</h1>
         </header>
+
+        {!keyConfigured && (
+          <div style={styles.banner}>
+            No AI provider key set for this browser.{" "}
+            <Link href="/settings" style={styles.bannerLink}>
+              Add one in Settings
+            </Link>{" "}
+            to run the agent (or the server&apos;s key is used if configured).
+          </div>
+        )}
 
         <form
           onSubmit={(e) => {
@@ -145,6 +168,19 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "8vh 20px 60px",
   },
   container: { width: "100%", maxWidth: 720 },
+  topbar: { display: "flex", justifyContent: "flex-end", marginBottom: 8 },
+  settingsLink: { fontSize: 13, color: "var(--muted)", textDecoration: "none" },
+  banner: {
+    marginTop: 18,
+    padding: "10px 14px",
+    borderRadius: 12,
+    border: "1px solid var(--border)",
+    background: "var(--card)",
+    color: "var(--muted)",
+    fontSize: 13,
+    textAlign: "center",
+  },
+  bannerLink: { color: "var(--accent)", textDecoration: "none", fontWeight: 600 },
   header: { textAlign: "center", marginBottom: 28 },
   logo: {
     fontSize: 13,

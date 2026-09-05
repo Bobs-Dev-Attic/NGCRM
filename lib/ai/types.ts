@@ -34,6 +34,19 @@ export type ProviderResponse = {
   toolCalls: ToolCall[];
 };
 
+/**
+ * Runtime provider configuration, supplied per request (e.g. from the browser's
+ * Settings page in bring-your-own-key mode). Any field left undefined falls back
+ * to the corresponding environment variable on the server.
+ */
+export type ProviderConfig = {
+  provider?: string; // "anthropic" | "openai-compatible"
+  model?: string;
+  apiKey?: string;
+  baseUrl?: string; // openai-compatible / local LLM endpoint
+  workspaceId?: string; // Anthropic org-key workspace id
+};
+
 /** A tool the agent can call. Declared once, used by every provider. */
 export type AgentTool = {
   name: string;
