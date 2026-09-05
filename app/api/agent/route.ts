@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { runAgent } from "@/lib/ai/agent";
+import { saveRequest } from "@/lib/history";
 import type { ProviderConfig } from "@/lib/ai/types";
 
 // The agent uses the Node.js runtime (SDKs + DB pooling), not Edge.
@@ -40,7 +41,9 @@ export async function POST(req: Request) {
     // Note: config may carry a user's API key (bring-your-own-key). It is used
     // transiently for this request only and never logged or persisted.
     const result = await runAgent(intent, config);
-    return NextResponse.json(result);
+    // Log to history (best-effort). The returned id lets the UI attach feedback.
+    const historyId = await saveRequest(intent, result);
+    return NextResponse.json({ ...result, historyId });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Something went wrong.";
     return NextResponse.json({ error: message }, { status: 500 });

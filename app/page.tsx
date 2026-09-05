@@ -22,6 +22,17 @@ type AgentResult = {
   steps: AgentStep[];
   usage?: Usage;
   turns?: number;
+  historyId?: number | null;
+};
+
+type HistoryItem = {
+  id: number;
+  intent: string;
+  model: string | null;
+  total_tokens: number;
+  tools_used: string[];
+  rating: number | null;
+  created_at: string;
 };
 
 const EXAMPLES = [
@@ -39,12 +50,40 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [keyConfigured, setKeyConfigured] = useState(true);
   const [display, setDisplay] = useState({ showTokens: true, showCost: true });
+  const [recent, setRecent] = useState<HistoryItem[]>([]);
+  const [rating, setRating] = useState<number | null>(null);
+
+  async function refreshRecent() {
+    try {
+      const res = await fetch("/api/history?limit=6");
+      const data = await res.json();
+      setRecent(Array.isArray(data?.items) ? data.items : []);
+    } catch {
+      /* ignore */
+    }
+  }
 
   useEffect(() => {
     const s = loadSettings();
     setKeyConfigured(hasUsableKey(s));
     setDisplay({ showTokens: s.showTokens ?? true, showCost: s.showCost ?? true });
+    refreshRecent();
   }, []);
+
+  async function rate(value: number) {
+    if (!result?.historyId) return;
+    setRating(value);
+    try {
+      await fetch("/api/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: result.historyId, rating: value }),
+      });
+      refreshRecent();
+    } catch {
+      /* ignore */
+    }
+  }
 
   async function submit(text: string) {
     const value = text.trim();
@@ -52,6 +91,7 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setRating(null);
     const settings = loadSettings();
     setDisplay({ showTokens: settings.showTokens ?? true, showCost: settings.showCost ?? true });
     try {
@@ -63,6 +103,7 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Request failed");
       setResult(data as AgentResult);
+      refreshRecent();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -143,6 +184,29 @@ export default function Home() {
           </div>
         )}
 
+        {!result && !loading && recent.length > 0 && (
+          <div style={styles.recent}>
+            <div style={styles.recentTitle}>Recent</div>
+            {recent.map((h) => (
+              <button
+                key={h.id}
+                style={styles.recentItem}
+                onClick={() => {
+                  setIntent(h.intent);
+                  submit(h.intent);
+                }}
+                title={h.tools_used?.length ? `Tools: ${h.tools_used.join(", ")}` : undefined}
+              >
+                <span style={styles.recentIntent}>{h.intent}</span>
+                <span style={styles.recentMeta}>
+                  {h.rating === 1 ? "👍 " : h.rating === -1 ? "👎 " : ""}
+                  {new Date(h.created_at).toLocaleDateString()}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {error && <div style={styles.error}>{error}</div>}
 
         {result && (
@@ -168,6 +232,29 @@ export default function Home() {
               })()}
               {result.turns ? ` · ${result.turns} model ${result.turns === 1 ? "turn" : "turns"}` : ""}
             </div>
+
+            {result.historyId != null && (
+              <div style={styles.feedback}>
+                <span style={styles.feedbackLabel}>Was this helpful?</span>
+                <button
+                  type="button"
+                  onClick={() => rate(1)}
+                  style={{ ...styles.rateBtn, ...(rating === 1 ? styles.rateBtnActive : {}) }}
+                  aria-label="Helpful"
+                >
+                  👍
+                </button>
+                <button
+                  type="button"
+                  onClick={() => rate(-1)}
+                  style={{ ...styles.rateBtn, ...(rating === -1 ? styles.rateBtnActive : {}) }}
+                  aria-label="Not helpful"
+                >
+                  👎
+                </button>
+                {rating !== null && <span style={styles.feedbackThanks}>Thanks — saved.</span>}
+              </div>
+            )}
 
             {result.steps.some((s) => s.type === "tool") && (
               <details style={styles.details}>
@@ -297,6 +384,48 @@ const styles: Record<string, React.CSSProperties> = {
     boxShadow: "var(--shadow)",
   },
   meta: { marginTop: 10, fontSize: 12.5, color: "var(--muted)" },
+  recent: { marginTop: 26, display: "flex", flexDirection: "column", gap: 6 },
+  recentTitle: {
+    fontSize: 12,
+    letterSpacing: "0.1em",
+    textTransform: "uppercase",
+    color: "var(--muted)",
+    marginBottom: 4,
+    textAlign: "center",
+  },
+  recentItem: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    width: "100%",
+    background: "var(--card)",
+    border: "1px solid var(--border)",
+    borderRadius: 10,
+    padding: "9px 14px",
+    fontSize: 13,
+    color: "var(--fg)",
+    cursor: "pointer",
+    textAlign: "left",
+  },
+  recentIntent: {
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  recentMeta: { color: "var(--muted)", fontSize: 12, flexShrink: 0 },
+  feedback: { marginTop: 12, display: "flex", alignItems: "center", gap: 8 },
+  feedbackLabel: { fontSize: 13, color: "var(--muted)" },
+  rateBtn: {
+    border: "1px solid var(--border)",
+    background: "var(--card)",
+    borderRadius: 8,
+    padding: "4px 10px",
+    fontSize: 14,
+    cursor: "pointer",
+  },
+  rateBtnActive: { borderColor: "var(--accent)", background: "rgba(181,80,42,0.12)" },
+  feedbackThanks: { fontSize: 12, color: "var(--ok)" },
   details: { marginTop: 14 },
   summary: { cursor: "pointer", fontSize: 13, color: "var(--muted)" },
   steps: { marginTop: 12, display: "flex", flexDirection: "column", gap: 12 },

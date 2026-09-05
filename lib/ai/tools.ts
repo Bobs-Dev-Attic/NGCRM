@@ -418,6 +418,29 @@ export const tools: AgentTool[] = [
       return { goals: rows };
     },
   },
+
+  {
+    name: "list_recent_requests",
+    description:
+      "Recall the user's recent requests to this CRM — what they asked, which tools ran, and how they rated the result. Use this to answer 'what did I work on earlier' or to tailor your approach to how this user likes to work.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: { type: "number", description: "How many recent requests (default 10, max 50)." },
+      },
+    },
+    async execute(input) {
+      const sql = getSql();
+      const limit = Math.min(Math.max(Number(input.limit) || 10, 1), 50);
+      const rows = await sql`
+        SELECT intent, model, tools_used, rating, created_at
+        FROM request_history
+        ORDER BY created_at DESC
+        LIMIT ${limit}
+      `;
+      return { recent_requests: rows };
+    },
+  },
 ];
 
 export function getToolByName(name: string): AgentTool | undefined {
