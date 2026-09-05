@@ -1,3 +1,6 @@
+/* ---- Palette tokens ----
+   :root is the light default. "system" (no data-theme) follows the OS via the
+   guarded media query below. Explicit choices set data-theme on <html>. */
 :root {
   --bg: #fafaf9;
   --fg: #1c1b19;
@@ -10,8 +13,9 @@
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
 }
 
+/* System theme: only when the user hasn't chosen an explicit theme. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     --bg: #1a1917;
     --fg: #f2f0ec;
     --muted: #a8a6a0;
@@ -22,6 +26,69 @@
     --ok: #6fbf7f;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.35);
   }
+}
+
+:root[data-theme="light"] {
+  --bg: #fafaf9;
+  --fg: #1c1b19;
+  --muted: #6b6a66;
+  --border: #e7e5e1;
+  --card: #ffffff;
+  --accent: #b5502a;
+  --accent-fg: #ffffff;
+  --ok: #2f6f3e;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+:root[data-theme="dark"] {
+  --bg: #1a1917;
+  --fg: #f2f0ec;
+  --muted: #a8a6a0;
+  --border: #33312d;
+  --card: #232220;
+  --accent: #d67a54;
+  --accent-fg: #1a1917;
+  --ok: #6fbf7f;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* High contrast: pure black/white with a vivid accent and hard borders. */
+:root[data-theme="contrast"] {
+  --bg: #000000;
+  --fg: #ffffff;
+  --muted: #d4d4d4;
+  --border: #ffffff;
+  --card: #0a0a0a;
+  --accent: #ffd400;
+  --accent-fg: #000000;
+  --ok: #00e676;
+  --shadow: none;
+}
+
+/* Low light: dim, warm, low-luminance — easy on the eyes at night. */
+:root[data-theme="lowlight"] {
+  --bg: #14110e;
+  --fg: #cbb8a6;
+  --muted: #7d7266;
+  --border: #2a241d;
+  --card: #1b1712;
+  --accent: #b07a52;
+  --accent-fg: #14110e;
+  --ok: #7a9a6f;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* Monochrome: grayscale, neutral accent. */
+:root[data-theme="mono"] {
+  --bg: #f4f4f5;
+  --fg: #18181b;
+  --muted: #71717a;
+  --border: #d4d4d8;
+  --card: #ffffff;
+  --accent: #27272a;
+  --accent-fg: #ffffff;
+  --ok: #3f3f46;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
 * {
