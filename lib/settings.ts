@@ -24,12 +24,29 @@ export const DEFAULT_SETTINGS: ClientSettings = {
   workspaceId: "",
 };
 
+/**
+ * Model ids that providers have retired. A browser that saved one of these
+ * keeps sending it forever, so we transparently upgrade it on load — this lets
+ * a stale localStorage self-heal instead of hard-failing with a 404.
+ */
+const RETIRED_MODELS: Record<string, string> = {
+  "gemini-2.5-flash": "gemini-3.6-flash",
+  "gemini-2.5-pro": "gemini-3.6-flash",
+};
+
+function migrate(s: ClientSettings): ClientSettings {
+  if (s.model && RETIRED_MODELS[s.model]) {
+    return { ...s, model: RETIRED_MODELS[s.model] };
+  }
+  return s;
+}
+
 export function loadSettings(): ClientSettings {
   if (typeof window === "undefined") return { ...DEFAULT_SETTINGS };
   try {
     const raw = window.localStorage.getItem(KEY);
     if (!raw) return { ...DEFAULT_SETTINGS };
-    return { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as ClientSettings) };
+    return migrate({ ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as ClientSettings) });
   } catch {
     return { ...DEFAULT_SETTINGS };
   }
