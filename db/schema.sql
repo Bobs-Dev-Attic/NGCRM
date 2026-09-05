@@ -140,6 +140,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- Add org_id to every tenant-scoped table; contacts also get a sensitivity tag.
+ALTER TABLE households      ADD COLUMN IF NOT EXISTS org_id BIGINT;
 ALTER TABLE contacts        ADD COLUMN IF NOT EXISTS org_id BIGINT;
 ALTER TABLE contacts        ADD COLUMN IF NOT EXISTS sensitivity TEXT NOT NULL DEFAULT 'normal';
 ALTER TABLE donations       ADD COLUMN IF NOT EXISTS org_id BIGINT;
@@ -150,6 +151,7 @@ ALTER TABLE campaign_drafts ADD COLUMN IF NOT EXISTS org_id BIGINT;
 ALTER TABLE request_history ADD COLUMN IF NOT EXISTS org_id BIGINT;
 
 -- Backfill existing rows to the default org (before RLS is forced).
+UPDATE households      SET org_id = (SELECT min(id) FROM orgs) WHERE org_id IS NULL;
 UPDATE contacts        SET org_id = (SELECT min(id) FROM orgs) WHERE org_id IS NULL;
 UPDATE donations       SET org_id = (SELECT min(id) FROM orgs) WHERE org_id IS NULL;
 UPDATE campaigns       SET org_id = (SELECT min(id) FROM orgs) WHERE org_id IS NULL;
@@ -159,6 +161,7 @@ UPDATE campaign_drafts SET org_id = (SELECT min(id) FROM orgs) WHERE org_id IS N
 UPDATE request_history SET org_id = (SELECT min(id) FROM orgs) WHERE org_id IS NULL;
 
 -- New rows adopt the session's org automatically (from the GUC set per request).
+ALTER TABLE households      ALTER COLUMN org_id SET DEFAULT nullif(current_setting('app.org_id', true), '')::bigint;
 ALTER TABLE contacts        ALTER COLUMN org_id SET DEFAULT nullif(current_setting('app.org_id', true), '')::bigint;
 ALTER TABLE donations       ALTER COLUMN org_id SET DEFAULT nullif(current_setting('app.org_id', true), '')::bigint;
 ALTER TABLE campaigns       ALTER COLUMN org_id SET DEFAULT nullif(current_setting('app.org_id', true), '')::bigint;
@@ -187,6 +190,11 @@ DROP POLICY IF EXISTS contacts_delete ON contacts;
 CREATE POLICY contacts_delete ON contacts FOR DELETE USING (app_org() IS NULL OR org_id = app_org());
 
 -- Other tenant tables: org isolation only.
+ALTER TABLE households ENABLE ROW LEVEL SECURITY;
+ALTER TABLE households FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS households_all ON households;
+CREATE POLICY households_all ON households FOR ALL USING (app_org() IS NULL OR org_id = app_org()) WITH CHECK (app_org() IS NULL OR org_id = app_org());
+
 ALTER TABLE donations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE donations FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS donations_all ON donations;
