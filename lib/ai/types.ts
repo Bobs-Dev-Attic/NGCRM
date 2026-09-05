@@ -18,6 +18,12 @@ export type ToolCall = {
   id: string;
   name: string;
   input: Record<string, unknown>;
+  /**
+   * Opaque, provider-specific data attached to the call that must be echoed
+   * back verbatim on the next turn. Gemini 3 returns a `thought_signature`
+   * here; OpenAI has no equivalent and leaves it undefined.
+   */
+  extra?: unknown;
 };
 
 /** Normalized conversation message passed to a provider. */
