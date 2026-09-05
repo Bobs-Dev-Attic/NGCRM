@@ -43,6 +43,98 @@ function normalizeContact(c: ContactInput) {
   };
 }
 
+// --- duplicate merge helpers ---
+
+type ContactRow = Record<string, unknown>;
+
+function toIntArray(v: unknown): number[] {
+  const arr = Array.isArray(v) ? v : [];
+  return arr
+    .map((x) => Number(x))
+    .filter((n) => Number.isInteger(n) && n > 0);
+}
+
+/** First non-empty value among the arguments, else null. */
+function coalesce(...vals: unknown[]): string | null {
+  for (const v of vals) {
+    if (v !== null && v !== undefined && String(v).trim() !== "") return String(v);
+  }
+  return null;
+}
+
+/** Combine a survivor row with loser rows into a single merged record. */
+function mergeFields(survivor: ContactRow, losers: ContactRow[]) {
+  const all = [survivor, ...losers];
+  const pick = (k: string) => coalesce(survivor[k], ...losers.map((l) => l[k]));
+  const tags = Array.from(
+    new Set(
+      all.flatMap((r) => (Array.isArray(r.tags) ? (r.tags as unknown[]) : [])).map(String)
+    )
+  );
+  const notes =
+    Array.from(
+      new Set(all.map((r) => r.notes).filter((n) => n && String(n).trim()).map(String))
+    ).join("\n") || null;
+  return {
+    first_name: pick("first_name"),
+    last_name: pick("last_name"),
+    email: pick("email"),
+    phone: pick("phone"),
+    address_line: pick("address_line"),
+    city: pick("city"),
+    state: pick("state"),
+    postal_code: pick("postal_code"),
+    household_id: coalesce(survivor.household_id, ...losers.map((l) => l.household_id)),
+    source: pick("source"),
+    tags,
+    notes,
+  };
+}
+
+/**
+ * Merge a group of duplicate contacts into one survivor: consolidate their
+ * fields, re-point donations to the survivor, and delete the losers. The three
+ * writes run in a single transaction so the group can never end up half-merged.
+ */
+type MergeResult =
+  | { error: string }
+  | { merged_into: number; removed: number[]; survivor: Record<string, unknown> };
+
+async function mergeContactGroup(ids: number[], keepId?: number): Promise<MergeResult> {
+  const sql = getSql();
+  const unique = Array.from(new Set(ids));
+  if (unique.length < 2) {
+    return { error: "Need at least two distinct contact ids to merge." };
+  }
+  const rows = (await sql`
+    SELECT * FROM contacts WHERE id = ANY(${unique}::bigint[]) ORDER BY id
+  `) as ContactRow[];
+  if (rows.length < 2) {
+    return { error: "Fewer than two matching contacts were found." };
+  }
+
+  // Survivor: the requested keep_id if it's in the group, else the lowest id.
+  const keep =
+    keepId && rows.some((r) => Number(r.id) === keepId) ? keepId : Number(rows[0].id);
+  const survivor = rows.find((r) => Number(r.id) === keep) as ContactRow;
+  const losers = rows.filter((r) => Number(r.id) !== keep);
+  const loserIds = losers.map((r) => Number(r.id));
+  const m = mergeFields(survivor, losers);
+
+  await sql.transaction([
+    sql`UPDATE donations SET contact_id = ${keep} WHERE contact_id = ANY(${loserIds}::bigint[])`,
+    sql`UPDATE contacts SET
+          first_name=${m.first_name}, last_name=${m.last_name}, email=${m.email},
+          phone=${m.phone}, address_line=${m.address_line}, city=${m.city},
+          state=${m.state}, postal_code=${m.postal_code}, household_id=${m.household_id},
+          source=${m.source}, tags=${m.tags}, notes=${m.notes}, updated_at=now()
+        WHERE id=${keep}`,
+    sql`DELETE FROM contacts WHERE id = ANY(${loserIds}::bigint[])`,
+  ]);
+
+  return { merged_into: keep, removed: loserIds, survivor: { id: keep, ...m } };
+}
+
 export const tools: AgentTool[] = [
   {
     name: "count_contacts",
@@ -195,6 +287,64 @@ export const tools: AgentTool[] = [
       return {
         duplicate_email_clusters: byEmail,
         duplicate_name_clusters: byName,
+      };
+    },
+  },
+
+  {
+    name: "merge_contacts",
+    description:
+      "Merge a specific set of duplicate contacts into one record. Consolidates their fields (keeps non-empty values, unions tags, joins notes), re-points their donations to the survivor, and deletes the rest. Use this after the user confirms which records are the same person — especially for name-only matches, which may be different people.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ids: {
+          type: "array",
+          description: "The contact ids to merge together (at least two).",
+          items: { type: "number" },
+        },
+        keep_id: {
+          type: "number",
+          description: "Which id to keep as the surviving record. Defaults to the lowest id.",
+        },
+      },
+      required: ["ids"],
+    },
+    async execute(input) {
+      const ids = toIntArray(input.ids);
+      const keepId = Number(input.keep_id) || undefined;
+      return mergeContactGroup(ids, keepId);
+    },
+  },
+
+  {
+    name: "auto_merge_duplicate_contacts",
+    description:
+      "Automatically merge all HIGH-CONFIDENCE duplicates — contacts sharing the same email address. Each email cluster is merged into its lowest id. Name-only matches are NOT auto-merged (they may be different people); use find_duplicate_contacts + merge_contacts for those after confirming with the user.",
+    inputSchema: { type: "object", properties: {} },
+    async execute() {
+      const sql = getSql();
+      const clusters = (await sql`
+        SELECT array_agg(id ORDER BY id) AS ids
+        FROM contacts
+        WHERE email IS NOT NULL AND email <> ''
+        GROUP BY lower(email) HAVING count(*) > 1
+      `) as { ids: unknown[] }[];
+
+      const merges: { merged_into: number; removed: number[] }[] = [];
+      let removedTotal = 0;
+      for (const c of clusters) {
+        const ids = toIntArray(c.ids);
+        const res = await mergeContactGroup(ids);
+        if ("merged_into" in res) {
+          merges.push({ merged_into: res.merged_into, removed: res.removed });
+          removedTotal += res.removed.length;
+        }
+      }
+      return {
+        clusters_merged: merges.length,
+        contacts_removed: removedTotal,
+        details: merges,
       };
     },
   },

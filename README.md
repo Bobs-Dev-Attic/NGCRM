@@ -106,7 +106,8 @@ Vercel project settings. The agent route runs on the Node.js runtime.
 
 ## What's next (beyond the skeleton)
 
-- Merge flow for duplicates; auto-build households from relative clusters
+- Auto-build households from relative clusters (duplicate detection + merge now shipped:
+  `find_duplicate_contacts`, `merge_contacts`, `auto_merge_duplicate_contacts`)
 - Full campaign builder (segment → draft → review → send) with email provider
 - Donations analytics and giving history per household
 - Streaming agent responses; task/goal tracking surfaced in the UI
