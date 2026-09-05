@@ -55,6 +55,21 @@ Agent loop  (lib/ai/agent.ts)
    Open http://localhost:3000 and try: *"How many contacts do we have?"* or
    *"Find contacts who might be related."*
 
+## Configuring the AI provider
+
+There are two ways to tell the agent which provider/model/key to use:
+
+1. **In-app Settings page (`/settings`) — bring-your-own-key.** Each visitor enters
+   their provider, model, and API key; these are stored in *their* browser
+   (localStorage) and sent with each request. The key is never persisted on the
+   server. This is the default path for the hosted demo, and it's what lets you
+   point at a local LLM without redeploying.
+2. **Server environment variables.** If a request carries no browser config, the
+   server falls back to `AI_PROVIDER` / `ANTHROPIC_API_KEY` / etc. Useful for a
+   single-tenant deployment where you'd rather set the key once in Vercel.
+
+Per-request browser config always takes precedence over the server env.
+
 ## Switching AI providers
 
 The agent never imports a vendor SDK directly. To use a local LLM instead of Claude:
