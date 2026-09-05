@@ -1,5 +1,6 @@
 import { getProvider } from "./provider";
 import { tools, getToolByName } from "./tools";
+import { buildWorkingStyle } from "@/lib/profile";
 import type { Message, ProviderConfig, Usage } from "./types";
 
 export type AgentStep = {
@@ -23,6 +24,8 @@ export type AgentResult = {
   usage: Usage;
   /** How many model turns (API round-trips) the request took. */
   turns: number;
+  /** Whether a learned working-style profile was applied to this request. */
+  personalized: boolean;
 };
 
 const SYSTEM_PROMPT = `You are the assistant inside "Next-Gen CRM", an AI-native CRM for a non-profit organization.
@@ -58,8 +61,13 @@ export async function runAgent(
   const usage: Usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
   let turns = 0;
 
+  // Personalize: fold the learned working-style profile into the system prompt.
+  const style = await buildWorkingStyle();
+  const system = style ? `${SYSTEM_PROMPT}\n\n${style.promptBlock}` : SYSTEM_PROMPT;
+  const personalized = style !== null;
+
   for (let turn = 0; turn < MAX_TURNS; turn++) {
-    const res = await provider.complete(SYSTEM_PROMPT, messages, tools);
+    const res = await provider.complete(system, messages, tools);
     turns++;
     if (res.usage) {
       usage.inputTokens += res.usage.inputTokens;
@@ -114,5 +122,5 @@ export async function runAgent(
       "I worked through that but didn't produce a final summary. Check the steps below for what happened.";
   }
 
-  return { provider: provider.name, model: provider.model, answer, steps, usage, turns };
+  return { provider: provider.name, model: provider.model, answer, steps, usage, turns, personalized };
 }

@@ -23,6 +23,7 @@ type AgentResult = {
   usage?: Usage;
   turns?: number;
   historyId?: number | null;
+  personalized?: boolean;
 };
 
 type HistoryItem = {
@@ -231,6 +232,7 @@ export default function Home() {
                   : ` · ~${formatUSD(cost)} est.`;
               })()}
               {result.turns ? ` · ${result.turns} model ${result.turns === 1 ? "turn" : "turns"}` : ""}
+              {result.personalized ? " · ✦ personalized" : ""}
             </div>
 
             {result.historyId != null && (
