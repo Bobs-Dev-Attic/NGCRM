@@ -2,11 +2,17 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import type { ProviderConfig } from "@/lib/ai/types";
-import { loadSettings, saveSettings, clearSettings, DEFAULT_SETTINGS } from "@/lib/settings";
+import {
+  loadSettings,
+  saveSettings,
+  clearSettings,
+  DEFAULT_SETTINGS,
+  type ClientSettings,
+} from "@/lib/settings";
+import { PROVIDER_PRESETS, getPreset } from "@/lib/providers";
 
 export default function SettingsPage() {
-  const [s, setS] = useState<ProviderConfig>(DEFAULT_SETTINGS);
+  const [s, setS] = useState<ClientSettings>(DEFAULT_SETTINGS);
   const [saved, setSaved] = useState(false);
   const [showKey, setShowKey] = useState(false);
 
@@ -14,8 +20,25 @@ export default function SettingsPage() {
     setS(loadSettings());
   }, []);
 
-  function update<K extends keyof ProviderConfig>(k: K, v: ProviderConfig[K]) {
+  const preset = getPreset(s.preset);
+
+  function update<K extends keyof ClientSettings>(k: K, v: ClientSettings[K]) {
     setS((prev) => ({ ...prev, [k]: v }));
+    setSaved(false);
+  }
+
+  function choosePreset(id: string) {
+    const p = getPreset(id);
+    // Switching preset prefills the transport, base URL, and default model.
+    setS((prev) => ({
+      ...prev,
+      preset: p.id,
+      provider: p.transport,
+      baseUrl: p.defaultBaseUrl ?? "",
+      model: p.defaultModel,
+      // workspace id only makes sense for Anthropic
+      workspaceId: p.transport === "anthropic" ? prev.workspaceId : "",
+    }));
     setSaved(false);
   }
 
@@ -30,7 +53,7 @@ export default function SettingsPage() {
     setSaved(false);
   }
 
-  const isAnthropic = (s.provider || "anthropic") === "anthropic";
+  const isAnthropic = preset.transport === "anthropic";
 
   return (
     <main style={styles.main}>
@@ -41,42 +64,73 @@ export default function SettingsPage() {
           </Link>
           <h1 style={styles.title}>Settings</h1>
           <p style={styles.sub}>
-            Configure the AI provider the agent uses. Your key is stored only in
-            this browser and sent with each request — it is never saved on the server.
+            Choose the AI provider the agent uses. Your key is stored only in this
+            browser and sent with each request — it is never saved on the server.
           </p>
         </header>
 
         <div style={styles.card}>
-          <label style={styles.label}>
-            Provider
-            <select
-              value={s.provider || "anthropic"}
-              onChange={(e) => update("provider", e.target.value)}
-              style={styles.input}
-            >
-              <option value="anthropic">Anthropic (Claude)</option>
-              <option value="openai-compatible">OpenAI-compatible / Local (Ollama, LM Studio…)</option>
-            </select>
-          </label>
+          <div style={styles.fieldLabel}>Provider</div>
+          <div style={styles.presetGrid}>
+            {PROVIDER_PRESETS.map((p) => {
+              const active = p.id === preset.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => choosePreset(p.id)}
+                  style={{
+                    ...styles.presetChip,
+                    ...(active ? styles.presetChipActive : {}),
+                  }}
+                >
+                  {p.label}
+                  {p.local ? <span style={styles.localTag}>local</span> : null}
+                </button>
+              );
+            })}
+          </div>
+
+          {preset.local && (
+            <div style={styles.guide}>
+              <div style={styles.guideTitle}>Set up {preset.label}</div>
+              <ol style={styles.guideList}>
+                {preset.setup?.map((step, i) => (
+                  <li key={i} style={styles.guideStep}>
+                    {step}
+                  </li>
+                ))}
+              </ol>
+              <div style={styles.guideCaveat}>
+                ⚠ Local models run on your machine, and the agent calls the
+                provider from the <strong>server</strong>. So a{" "}
+                <code>localhost</code> endpoint only works when you run NGCRM
+                locally (<code>npm run dev</code>) — the hosted{" "}
+                <code>ngcrm.vercel.app</code> server can&apos;t reach your
+                computer. Also pick a model that supports{" "}
+                <strong>tool / function calling</strong>, which the agent relies on.
+              </div>
+            </div>
+          )}
 
           <label style={styles.label}>
             Model
             <input
               value={s.model || ""}
               onChange={(e) => update("model", e.target.value)}
-              placeholder={isAnthropic ? "claude-sonnet-5" : "gpt-4o / llama3.1"}
+              placeholder={preset.defaultModel}
               style={styles.input}
             />
           </label>
 
           <label style={styles.label}>
-            API key
+            API key {!preset.needsKey && <span style={styles.optional}>(optional for local)</span>}
             <div style={styles.keyRow}>
               <input
                 type={showKey ? "text" : "password"}
                 value={s.apiKey || ""}
                 onChange={(e) => update("apiKey", e.target.value)}
-                placeholder={isAnthropic ? "sk-ant-…" : "(often not required for local models)"}
+                placeholder={preset.needsKey ? "paste your key…" : "(usually not required)"}
                 style={{ ...styles.input, marginBottom: 0 }}
                 autoComplete="off"
                 spellCheck={false}
@@ -85,6 +139,7 @@ export default function SettingsPage() {
                 {showKey ? "Hide" : "Show"}
               </button>
             </div>
+            {preset.keyHelp && <span style={styles.help}>{preset.keyHelp}</span>}
           </label>
 
           {isAnthropic ? (
@@ -103,7 +158,7 @@ export default function SettingsPage() {
               <input
                 value={s.baseUrl || ""}
                 onChange={(e) => update("baseUrl", e.target.value)}
-                placeholder="http://localhost:11434/v1"
+                placeholder={preset.defaultBaseUrl}
                 style={styles.input}
               />
             </label>
@@ -120,9 +175,8 @@ export default function SettingsPage() {
         </div>
 
         <p style={styles.note}>
-          Leave everything blank to use the server&apos;s configured provider (if any).
-          For a local model, choose &ldquo;OpenAI-compatible&rdquo; and point the Base URL at
-          your endpoint — e.g. Ollama at <code>http://localhost:11434/v1</code>.
+          Leave the key blank to fall back to the server&apos;s configured provider
+          (if any). Per-request browser settings always take precedence.
         </p>
       </div>
     </main>
@@ -143,8 +197,56 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 20,
     boxShadow: "var(--shadow)",
   },
+  fieldLabel: { fontSize: 13, fontWeight: 600, marginBottom: 10 },
+  presetGrid: { display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 18 },
+  presetChip: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    border: "1px solid var(--border)",
+    background: "var(--bg)",
+    color: "var(--fg)",
+    borderRadius: 999,
+    padding: "8px 14px",
+    fontSize: 13,
+    cursor: "pointer",
+  },
+  presetChipActive: {
+    borderColor: "var(--accent)",
+    background: "var(--accent)",
+    color: "var(--accent-fg)",
+    fontWeight: 600,
+  },
+  localTag: {
+    fontSize: 10,
+    textTransform: "uppercase",
+    letterSpacing: "0.06em",
+    opacity: 0.7,
+    border: "1px solid currentColor",
+    borderRadius: 4,
+    padding: "0 4px",
+  },
+  guide: {
+    border: "1px solid var(--border)",
+    borderRadius: 12,
+    padding: "14px 16px",
+    marginBottom: 18,
+    background: "var(--bg)",
+  },
+  guideTitle: { fontSize: 13, fontWeight: 600, marginBottom: 8 },
+  guideList: { margin: 0, paddingLeft: 18 },
+  guideStep: { fontSize: 13, color: "var(--fg)", lineHeight: 1.6, marginBottom: 4 },
+  guideCaveat: {
+    marginTop: 10,
+    fontSize: 12.5,
+    lineHeight: 1.6,
+    color: "var(--muted)",
+    borderTop: "1px solid var(--border)",
+    paddingTop: 10,
+  },
   label: { display: "block", fontSize: 13, fontWeight: 600, marginBottom: 16 },
   optional: { fontWeight: 400, color: "var(--muted)" },
+  help: { display: "block", fontWeight: 400, color: "var(--muted)", fontSize: 12, marginTop: 6 },
   input: {
     display: "block",
     width: "100%",
