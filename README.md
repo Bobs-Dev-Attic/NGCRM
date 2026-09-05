@@ -70,9 +70,27 @@ There are two ways to tell the agent which provider/model/key to use:
 
 Per-request browser config always takes precedence over the server env.
 
-## Switching AI providers
+## Supported providers
 
-The agent never imports a vendor SDK directly. To use a local LLM instead of Claude:
+The Settings page offers presets; all non-Anthropic providers share one
+OpenAI-compatible transport (only base URL / model / key differ):
+
+| Preset | Transport | Base URL | Key |
+|---|---|---|---|
+| Anthropic (Claude) | `anthropic` | — | required |
+| OpenAI (ChatGPT) | `openai-compatible` | `https://api.openai.com/v1` | required |
+| Google Gemini | `openai-compatible` | `https://generativelanguage.googleapis.com/v1beta/openai/` | required |
+| Ollama (local) | `openai-compatible` | `http://localhost:11434/v1` | none |
+| LM Studio (local) | `openai-compatible` | `http://localhost:1234/v1` | none |
+
+> **Local providers (Ollama, LM Studio)** only work when you run NGCRM locally
+> (`npm run dev`). The agent calls the provider from the **server**, so a
+> `localhost` endpoint is unreachable from the hosted Vercel deployment. Pick a
+> model that supports **tool / function calling**, which the agent relies on.
+
+## Switching AI providers via env (server-side)
+
+The agent never imports a vendor SDK directly. To set a default on the server:
 
 ```bash
 AI_PROVIDER=openai-compatible
@@ -80,9 +98,6 @@ OPENAI_BASE_URL=http://localhost:11434/v1   # Ollama
 OPENAI_API_KEY=ollama
 OPENAI_MODEL=llama3.1
 ```
-
-> Note: tool-calling quality depends on the model. Claude and GPT-4-class models
-> handle the CRM tools reliably; smaller local models may need a tool-capable variant.
 
 ## Deploying (Vercel + Neon)
 
