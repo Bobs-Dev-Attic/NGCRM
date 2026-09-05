@@ -16,6 +16,8 @@ export type ClientSettings = ProviderConfig & {
   /** Display toggles (client-only; ignored by the server). */
   showTokens?: boolean;
   showCost?: boolean;
+  /** Demo access role, sent as a header to scope RLS (stands in for real auth). */
+  demoRole?: string;
 };
 
 const KEY = "ngcrm.settings.v1";
@@ -29,6 +31,7 @@ export const DEFAULT_SETTINGS: ClientSettings = {
   workspaceId: "",
   showTokens: true,
   showCost: true,
+  demoRole: "staff",
 };
 
 /**

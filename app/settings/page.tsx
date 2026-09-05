@@ -99,6 +99,12 @@ export default function SettingsPage() {
     setS((prev) => ({ ...prev, [k]: v }));
   }
 
+  function updateRole(role: string) {
+    const next = { ...loadSettings(), demoRole: role };
+    saveSettings(next);
+    setS((prev) => ({ ...prev, demoRole: role }));
+  }
+
   // --- theme handlers ---
   function chooseTheme(id: ThemeId) {
     const next: ThemeState = { theme: id };
@@ -137,6 +143,31 @@ export default function SettingsPage() {
         {/* ---------- PROFILES ---------- */}
         {tab === "profiles" && (
           <div style={styles.card}>
+            <div style={styles.fieldLabel}>Acting as (demo access role)</div>
+            <div style={styles.presetGrid}>
+              {["admin", "staff", "volunteer"].map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => updateRole(r)}
+                  style={{
+                    ...styles.presetChip,
+                    ...((s.demoRole ?? "staff") === r ? styles.presetChipActive : {}),
+                  }}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+            <p style={styles.note}>
+              Requests run under this role, enforced by database row-level security. Try{" "}
+              <strong>volunteer</strong>: records marked restricted (e.g. board / major donors)
+              disappear from counts and lists — the database withholds them, not the AI. In a real
+              deployment this role comes from your login, not a switch.
+            </p>
+
+            <div style={styles.divider} />
+
             <div style={styles.fieldLabel}>Working style — learned from your history</div>
             {!profileLoaded ? (
               <div style={styles.styleEmpty}>Loading…</div>

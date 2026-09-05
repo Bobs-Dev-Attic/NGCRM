@@ -24,6 +24,7 @@ type AgentResult = {
   turns?: number;
   historyId?: number | null;
   personalized?: boolean;
+  role?: string;
 };
 
 type HistoryItem = {
@@ -98,7 +99,10 @@ export default function Home() {
     try {
       const res = await fetch("/api/agent", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-ngcrm-role": settings.demoRole || "staff",
+        },
         body: JSON.stringify({ intent: value, config: settings }),
       });
       const data = await res.json();
@@ -233,6 +237,7 @@ export default function Home() {
               })()}
               {result.turns ? ` · ${result.turns} model ${result.turns === 1 ? "turn" : "turns"}` : ""}
               {result.personalized ? " · ✦ personalized" : ""}
+              {result.role ? ` · 🔒 as ${result.role}` : ""}
             </div>
 
             {result.historyId != null && (
