@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Script from "next/script";
 import "./globals.css";
+import { VersionBadge } from "@/components/VersionBadge";
 
 export const metadata: Metadata = {
   title: "Next-Gen CRM",
@@ -28,6 +29,7 @@ export default function RootLayout({
           {THEME_BOOT}
         </Script>
         {children}
+        <VersionBadge />
       </body>
     </html>
   );
