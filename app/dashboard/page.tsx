@@ -7,7 +7,7 @@ type Dashboard = {
   contacts: number;
   byTag: { tag: string; n: number }[];
   households: number;
-  topHouseholds: { name: string | null; members: number }[];
+  topHouseholds: { id: number; name: string | null; members: number }[];
   donations: { total: number; gifts: number; donors: number };
   topDonors: { name: string; total: number }[];
   campaigns: { status: string; n: number }[];
@@ -87,9 +87,11 @@ export default function DashboardPage() {
                   <div style={styles.empty}>No households yet. Try “build households”.</div>
                 ) : (
                   <ul style={styles.list}>
-                    {d.topHouseholds.map((h, i) => (
-                      <li key={i} style={styles.li}>
-                        <span>{h.name || "Household"}</span>
+                    {d.topHouseholds.map((h) => (
+                      <li key={h.id} style={styles.li}>
+                        <Link href={`/households/${h.id}`} style={styles.contactLink}>
+                          {h.name || "Household"}
+                        </Link>
                         <span style={styles.muted}>{h.members} members</span>
                       </li>
                     ))}
