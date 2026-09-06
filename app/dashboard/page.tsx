@@ -12,6 +12,7 @@ type Dashboard = {
   topDonors: { name: string; total: number }[];
   campaigns: { status: string; n: number }[];
   campaignList: { id: number; name: string; status: string; goal: number | null; raised: number }[];
+  givingByMonth: { month: string; total: number; gifts: number }[];
   drafts: number;
   recentContacts: { id: number; name: string; email: string | null; tags: string[]; created_at: string }[];
 };
@@ -61,6 +62,8 @@ export default function DashboardPage() {
               <Tile label="Total raised" value={usd(d.donations.total)} sub={`${d.donations.gifts} gifts`} />
               <Tile label="Campaigns" value={campaignTotal.toLocaleString()} sub={`${d.drafts} drafts`} />
             </div>
+
+            <GivingChart data={d.givingByMonth} />
 
             <div style={styles.grid}>
               <section style={styles.card}>
@@ -173,6 +176,60 @@ export default function DashboardPage() {
   );
 }
 
+const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const usdFull = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+
+/** Giving over the last 12 months as a column chart (empty months filled in). */
+function GivingChart({ data }: { data: { month: string; total: number; gifts: number }[] }) {
+  const byMonth = new Map(data.map((d) => [d.month, d]));
+  const now = new Date();
+  const months: { key: string; label: string; year: number; total: number; gifts: number }[] = [];
+  for (let i = 11; i >= 0; i--) {
+    const dt = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
+    const hit = byMonth.get(key);
+    months.push({
+      key,
+      label: MONTH_LABELS[dt.getMonth()],
+      year: dt.getFullYear(),
+      total: hit?.total ?? 0,
+      gifts: hit?.gifts ?? 0,
+    });
+  }
+  const max = Math.max(1, ...months.map((m) => m.total));
+  const windowTotal = months.reduce((a, m) => a + m.total, 0);
+  const hasAny = windowTotal > 0;
+
+  return (
+    <section style={{ ...styles.card, marginBottom: 16 }}>
+      <div style={styles.chartHead}>
+        <div style={styles.cardTitle}>Giving over time</div>
+        <div style={styles.chartMeta}>Last 12 months · {usd(windowTotal)}</div>
+      </div>
+      {!hasAny ? (
+        <div style={styles.empty}>No gifts recorded in the last 12 months.</div>
+      ) : (
+        <div style={styles.chart} role="img" aria-label={`Monthly giving, last 12 months, total ${usdFull(windowTotal)}`}>
+          {months.map((m) => (
+            <div key={m.key} style={styles.col} title={`${m.label} ${m.year}: ${usdFull(m.total)} (${m.gifts} gift${m.gifts === 1 ? "" : "s"})`}>
+              <div style={styles.colBarWrap}>
+                <div
+                  style={{
+                    ...styles.colBar,
+                    height: `${(m.total / max) * 100}%`,
+                    opacity: m.total > 0 ? 1 : 0,
+                  }}
+                />
+              </div>
+              <div style={styles.colLabel}>{m.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div style={styles.tile}>
@@ -214,6 +271,13 @@ const styles: Record<string, React.CSSProperties> = {
     boxShadow: "var(--shadow)",
   },
   cardTitle: { fontSize: 13, fontWeight: 600, marginBottom: 12 },
+  chartHead: { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 },
+  chartMeta: { fontSize: 12.5, color: "var(--muted)", fontVariantNumeric: "tabular-nums" },
+  chart: { display: "flex", alignItems: "flex-end", gap: 6, height: 140, marginTop: 6 },
+  col: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, height: "100%" },
+  colBarWrap: { flex: 1, width: "100%", display: "flex", alignItems: "flex-end", minHeight: 0 },
+  colBar: { width: "100%", background: "var(--accent)", borderRadius: "4px 4px 0 0", minHeight: 2 },
+  colLabel: { fontSize: 10.5, color: "var(--muted)" },
   empty: { fontSize: 13, color: "var(--muted)" },
   bars: { display: "flex", flexDirection: "column", gap: 8 },
   barRow: { display: "flex", alignItems: "center", gap: 10, fontSize: 13 },

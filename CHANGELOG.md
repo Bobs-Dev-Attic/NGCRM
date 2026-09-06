@@ -7,6 +7,14 @@ exact Git commit (on Vercel deploys).
 This project uses loose semantic versioning while pre-1.0: minor bumps for
 features, patch bumps for fixes.
 
+## 0.24.0 — Giving-over-time chart
+- The dashboard gains a **"Giving over time"** card: a 12-month column chart of
+  monthly donation totals (empty months filled in), with the window total and
+  per-month amount/gift count on hover. Theme-aware, accessible (labeled), and
+  built with the existing CSS-bar style — no chart library.
+- `GET /api/dashboard` now returns `givingByMonth` (monthly sums for the last 12
+  months), RLS-scoped like the rest of the dashboard. No migration.
+
 ## 0.23.0 — Embed-on-write (contacts self-index)
 - Contacts created by the agent (`add_contact`, `import_contacts`) are now
   embedded immediately, so they're findable by semantic search without waiting
