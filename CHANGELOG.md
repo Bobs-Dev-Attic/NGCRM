@@ -7,6 +7,17 @@ exact Git commit (on Vercel deploys).
 This project uses loose semantic versioning while pre-1.0: minor bumps for
 features, patch bumps for fixes.
 
+## 0.15.0 — Contact view with giving history
+- New `/contacts/[id]` page: a contact's details (email, phone, address,
+  household, tags, notes) alongside a **giving history panel** — total given,
+  gift count, largest gift, last gift, and a dated table of every gift with
+  its campaign.
+- `GET /api/contacts/[id]` backs it, auth-gated and **RLS-scoped**: a contact
+  a user isn't allowed to see returns 404 (the row is invisible under RLS),
+  not a partial record.
+- Recent contacts on the dashboard now link through to the contact view.
+- Added to the middleware matcher. No migration (uses existing tables).
+
 ## 0.14.0 — Donation tracking
 - New agent tools: `record_donation` (log a gift; resolves the donor by
   contact_id / exact email / full name, and returns candidates to

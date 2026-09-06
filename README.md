@@ -31,6 +31,11 @@ Agent loop  (lib/ai/agent.ts)
 - **Database** — Neon Postgres (`db/schema.sql`): contacts, households,
   campaigns, donations, goals, tasks, `request_history`, and `orgs`.
   `db:migrate` is idempotent — re-run it after pulling schema changes.
+- **Contact view** — `/contacts/[id]` shows a contact's details next to a
+  **giving history** panel (total given, gift count, largest/last gift, and a
+  dated list of every gift with its campaign). Backed by `GET /api/contacts/[id]`,
+  auth-gated and RLS-scoped (an out-of-scope contact returns 404). Reachable from
+  the dashboard's recent-contacts list.
 - **Dashboard** — `/dashboard` gives an at-a-glance view: tiles for contacts,
   households, donors, total raised and campaigns, plus a contacts-by-tag chart
   and top-households / top-donors / recent-contacts lists. It reads
