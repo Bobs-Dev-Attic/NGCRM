@@ -1,6 +1,7 @@
 import { getSql, getContext } from "@/lib/db";
 import { resendConfigured, sendEmail } from "@/lib/email";
 import { embedTexts, toVectorLiteral, contactEmbedText } from "@/lib/ai/embeddings";
+import { normalizeCustom, mergeCustom } from "@/lib/custom";
 import type { AgentTool } from "./types";
 
 /**
@@ -27,6 +28,7 @@ type ContactInput = {
   tags?: unknown;
   source?: unknown;
   notes?: unknown;
+  custom?: unknown;
 };
 
 function normalizeContact(c: ContactInput) {
@@ -42,6 +44,7 @@ function normalizeContact(c: ContactInput) {
     tags: Array.isArray(c.tags) ? c.tags.map((t) => String(t)) : [],
     source: str(c.source) ?? "agent",
     notes: str(c.notes),
+    custom: normalizeCustom(c.custom),
   };
 }
 
@@ -289,7 +292,7 @@ async function embedNewContacts(ids: number[]): Promise<void> {
   try {
     const sql = getSql();
     const rows = (await sql`
-      SELECT id, first_name, last_name, email, city, state, tags, notes
+      SELECT id, first_name, last_name, email, city, state, tags, notes, custom
       FROM contacts WHERE id = ANY(${targets}::bigint[])
     `) as {
       id: number;
@@ -300,6 +303,7 @@ async function embedNewContacts(ids: number[]): Promise<void> {
       state: string | null;
       tags: string[] | null;
       notes: string | null;
+      custom: unknown;
     }[];
     for (let i = 0; i < rows.length; i += EMBED_BATCH) {
       const chunk = rows.slice(i, i + EMBED_BATCH);
@@ -385,6 +389,10 @@ export const tools: AgentTool[] = [
         postal_code: { type: "string" },
         tags: { type: "array", items: { type: "string" } },
         notes: { type: "string" },
+        custom: {
+          type: "object",
+          description: "Custom fields as key/value pairs (e.g. { \"T-shirt size\": \"L\" }).",
+        },
       },
     },
     async execute(input) {
@@ -392,14 +400,57 @@ export const tools: AgentTool[] = [
       const c = normalizeContact(input as ContactInput);
       const [row] = await sql`
         INSERT INTO contacts
-          (first_name, last_name, email, phone, address_line, city, state, postal_code, tags, source, notes)
+          (first_name, last_name, email, phone, address_line, city, state, postal_code, tags, source, notes, custom)
         VALUES
           (${c.first_name}, ${c.last_name}, ${c.email}, ${c.phone}, ${c.address_line},
-           ${c.city}, ${c.state}, ${c.postal_code}, ${c.tags}, ${c.source}, ${c.notes})
+           ${c.city}, ${c.state}, ${c.postal_code}, ${c.tags}, ${c.source}, ${c.notes},
+           ${JSON.stringify(c.custom)}::jsonb)
         RETURNING id, first_name, last_name, email
       `;
       await embedNewContacts([Number(row.id)]);
       return { added: row };
+    },
+  },
+
+  {
+    name: "set_contact_custom_fields",
+    description:
+      "Set or remove custom fields (org-specific key/value data like 'T-shirt size' or 'Board term ends') on an existing contact. Fields are merged into the contact's existing custom data; pass an empty string or null as a value to remove that key. Identify the contact by contact_id, or by name/email.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        contact_id: { type: "number" },
+        name: { type: "string", description: "Contact full name (if no contact_id)." },
+        email: { type: "string", description: "Contact email (if no contact_id)." },
+        fields: {
+          type: "object",
+          description: "Key/value pairs to set; empty/null value removes the key.",
+        },
+      },
+      required: ["fields"],
+    },
+    async execute(input) {
+      const sql = getSql();
+      const r = await resolveContact(input.contact_id, input.name, input.email);
+      if (r.error) return { error: r.error };
+      if (r.candidates) {
+        return {
+          needs_disambiguation: true,
+          message: "Multiple contacts match. Re-call with the intended contact_id.",
+          candidates: r.candidates,
+        };
+      }
+      const contact = r.contact!;
+      const [existing] = (await sql`SELECT custom FROM contacts WHERE id = ${contact.id}`) as {
+        custom: unknown;
+      }[];
+      const merged = mergeCustom(existing?.custom, input.fields);
+      await sql`
+        UPDATE contacts SET custom = ${JSON.stringify(merged)}::jsonb, updated_at = now()
+        WHERE id = ${contact.id}
+      `;
+      await embedNewContacts([contact.id]); // re-embed so search reflects new fields
+      return { contact: { id: contact.id, name: contact.name.trim() || contact.email }, custom: merged };
     },
   },
 

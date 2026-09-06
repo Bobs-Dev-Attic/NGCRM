@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSql, runWithContext } from "@/lib/db";
 import { contextFromRequest, requireStaff } from "@/lib/access";
+import { normalizeCustom } from "@/lib/custom";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,7 +27,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       const [contact] = (await sql`
         SELECT c.id, c.first_name, c.last_name, c.email, c.phone,
                c.address_line, c.city, c.state, c.postal_code,
-               c.tags, c.source, c.notes, c.created_at,
+               c.tags, c.source, c.notes, c.custom, c.created_at,
                c.household_id, h.name AS household
         FROM contacts c
         LEFT JOIN households h ON h.id = c.household_id
@@ -44,6 +45,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         tags: string[];
         source: string | null;
         notes: string | null;
+        custom: Record<string, string>;
         created_at: string;
         household_id: number | null;
         household: string | null;
@@ -150,6 +152,48 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ recorded: row }, { status: 201 });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to record gift.";
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
+  });
+}
+
+/**
+ * Update a contact's custom (JSONB) fields. Admin/staff only (volunteers get
+ * 403), org-scoped via RLS. The provided object replaces the whole custom map
+ * (the editor sends the full set); values are coerced to trimmed strings and
+ * empty ones dropped.
+ */
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireStaff(req);
+  if (guard === 401) return NextResponse.json({ error: "Please sign in." }, { status: 401 });
+  if (guard === 403) return NextResponse.json({ error: "Admins and staff only." }, { status: 403 });
+  const ctx = guard;
+
+  const id = Number((await params).id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return NextResponse.json({ error: "Invalid contact id." }, { status: 400 });
+  }
+
+  let body: { custom?: unknown };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+  }
+  const custom = normalizeCustom(body.custom);
+
+  return runWithContext(ctx, async () => {
+    try {
+      const sql = getSql();
+      const [row] = (await sql`
+        UPDATE contacts SET custom = ${JSON.stringify(custom)}::jsonb, updated_at = now()
+        WHERE id = ${id}
+        RETURNING id
+      `) as { id: number }[];
+      if (!row) return NextResponse.json({ error: "Contact not found." }, { status: 404 });
+      return NextResponse.json({ custom });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to update fields.";
       return NextResponse.json({ error: message }, { status: 500 });
     }
   });

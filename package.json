@@ -1,6 +1,6 @@
 {
   "name": "ngcrm",
-  "version": "0.24.0",
+  "version": "0.25.0",
   "private": true,
   "description": "Next-Gen CRM — an AI-native, intent-driven CRM for non-profits",
   "type": "module",
