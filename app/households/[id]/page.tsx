@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { CustomFields } from "@/components/CustomFields";
 
-type Household = { id: number; name: string | null; created_at: string };
+type Household = { id: number; name: string | null; custom: Record<string, string>; created_at: string };
 type Member = { id: number; name: string; email: string | null; tags: string[]; given: number; gifts: number };
 type Giving = { total: number; gifts: number; donors: number; largest: number; last_gift: string | null };
 type Donation = {
@@ -105,6 +106,17 @@ export default function HouseholdPage() {
   const name = h ? h.name || "Household" : "";
   const canRecord = data?.role === "admin" || data?.role === "staff";
 
+  async function saveCustom(custom: Record<string, string>) {
+    const r = await fetch(`/api/households/${params.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ custom }),
+    });
+    const body = await r.json();
+    if (!r.ok) throw new Error(body?.error || "Failed to save");
+    await load();
+  }
+
   return (
     <main style={styles.main}>
       <div style={styles.container}>
@@ -196,6 +208,10 @@ export default function HouseholdPage() {
                   </button>
                 </form>
               )}
+            </section>
+
+            <section style={{ ...styles.card, marginBottom: 14 }}>
+              <CustomFields fields={h.custom || {}} canEdit={canRecord} onSave={saveCustom} />
             </section>
 
             <div style={styles.grid}>

@@ -40,7 +40,8 @@ Agent loop  (lib/ai/agent.ts)
   volunteers get 403). Reachable from the dashboard's recent-contacts list.
   Contacts also carry **custom fields** — org-specific key/value data in a JSONB
   column, editable on the page by admins/staff and by the agent
-  (`set_contact_custom_fields`), and folded into semantic search.
+  (`set_contact_custom_fields`), and folded into semantic search. Households and
+  campaigns carry custom fields too (editable on their pages by admins/staff).
 - **Household view** — `/households/[id]` rolls up **combined giving** across a
   household (total, gifts, donors, largest, last gift) with a member list and a
   household-wide gift history, plus a **Record a gift** form with a member
