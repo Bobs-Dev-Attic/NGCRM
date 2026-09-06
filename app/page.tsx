@@ -148,6 +148,9 @@ export default function Home() {
               👤 Users
             </Link>
           )}
+          <Link href="/search" style={styles.settingsLink}>
+            🔎 Search
+          </Link>
           <Link href="/dashboard" style={styles.settingsLink}>
             📊 Dashboard
           </Link>

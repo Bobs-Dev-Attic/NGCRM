@@ -13,6 +13,8 @@ export type ProviderPreset = {
   transport: "anthropic" | "openai-compatible";
   defaultBaseUrl?: string;
   defaultModel: string;
+  /** Default embeddings model for semantic search (OpenAI-compatible only). */
+  defaultEmbedModel?: string;
   /** Whether an API key is required (local runtimes usually don't need one). */
   needsKey: boolean;
   /** Runs on the user's own machine (localhost). */
@@ -38,6 +40,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     transport: "openai-compatible",
     defaultBaseUrl: "https://api.openai.com/v1",
     defaultModel: "gpt-4o",
+    defaultEmbedModel: "text-embedding-3-small",
     needsKey: true,
     keyHelp: "Create a key at platform.openai.com → API keys.",
   },

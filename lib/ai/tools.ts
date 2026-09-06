@@ -927,6 +927,62 @@ export const tools: AgentTool[] = [
     },
   },
 
+  // ---- Semantic search ----
+
+  {
+    name: "find_similar_contacts",
+    description:
+      "Find contacts most similar to a given contact by meaning (name, tags, location, notes), using vector embeddings — good for 'find people like this donor' or fuzzy near-duplicates. Requires the contacts to have been indexed (Reindex on the Search page). Identify the anchor by contact_id, or by name/email.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        contact_id: { type: "number" },
+        name: { type: "string", description: "Anchor contact full name (if no contact_id)." },
+        email: { type: "string", description: "Anchor contact email (if no contact_id)." },
+        limit: { type: "number", description: "How many similar contacts (default 5, max 25)." },
+      },
+    },
+    async execute(input) {
+      const sql = getSql();
+      const r = await resolveContact(input.contact_id, input.name, input.email);
+      if (r.error) return { error: r.error };
+      if (r.candidates) {
+        return {
+          needs_disambiguation: true,
+          message: "Multiple contacts match. Re-call with the intended contact_id.",
+          candidates: r.candidates,
+        };
+      }
+      const anchor = r.contact!;
+      const limit = Math.min(Math.max(Number(input.limit) || 5, 1), 25);
+      try {
+        const [{ has_embedding }] = (await sql`
+          SELECT (embedding IS NOT NULL) AS has_embedding FROM contacts WHERE id = ${anchor.id}
+        `) as { has_embedding: boolean }[];
+        if (!has_embedding) {
+          return {
+            error: `"${anchor.name.trim() || anchor.email}" isn't indexed yet. Ask an admin/staff to run Reindex on the Search page, then try again.`,
+          };
+        }
+        const rows = await sql`
+          WITH target AS (SELECT embedding FROM contacts WHERE id = ${anchor.id})
+          SELECT c.id,
+                 coalesce(c.first_name,'') || ' ' || coalesce(c.last_name,'') AS name,
+                 c.email, c.tags, c.city, c.state,
+                 round((1 - (c.embedding <=> t.embedding))::numeric, 3)::float AS similarity
+          FROM contacts c, target t
+          WHERE c.id <> ${anchor.id} AND c.embedding IS NOT NULL
+          ORDER BY c.embedding <=> t.embedding
+          LIMIT ${limit}
+        `;
+        return { anchor: { id: anchor.id, name: anchor.name.trim() || anchor.email }, similar: rows };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Similarity search failed.";
+        return { error: message + " (Has the schema been migrated with pgvector?)" };
+      }
+    },
+  },
+
   // ---- Donations ----
 
   {

@@ -177,6 +177,24 @@ export function hasUsableKey(s: ClientSettings): boolean {
   return s.providers.some(entryEligible);
 }
 
+/** Embed config for semantic search (client -> server). Picks the first enabled
+ * OpenAI-compatible provider that has a usable key and a default embeddings
+ * model (currently OpenAI). Returns null when none is configured. */
+export function embeddingConfig(
+  s: ClientSettings
+): { baseUrl: string; apiKey: string; model: string } | null {
+  for (const e of s.providers) {
+    if (!e.enabled) continue;
+    const p = getPreset(e.preset);
+    if (p.transport !== "openai-compatible" || !p.defaultEmbedModel) continue;
+    if (p.needsKey && !e.apiKey.trim()) continue;
+    const baseUrl = (e.baseUrl || p.defaultBaseUrl || "").trim();
+    if (!baseUrl) continue;
+    return { baseUrl, apiKey: e.apiKey, model: p.defaultEmbedModel };
+  }
+  return null;
+}
+
 /** Accumulate per-provider token usage returned by the server (matched by id/label). */
 export function recordUsage(
   usage: { label: string; tokens: number }[] | undefined
