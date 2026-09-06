@@ -7,6 +7,18 @@ exact Git commit (on Vercel deploys).
 This project uses loose semantic versioning while pre-1.0: minor bumps for
 features, patch bumps for fixes.
 
+## 0.16.0 — Household view with combined giving
+- New `/households/[id]` page: **combined giving** across the household
+  (total, gift count, distinct donors, largest, last gift), a member list
+  with each member's giving, and a household-wide gift history (date, donor,
+  campaign, amount).
+- `GET /api/households/[id]` backs it, auth-gated and **RLS-scoped**: members
+  (and their gifts) the signed-in user isn't allowed to see are excluded from
+  the list and the combined totals — the rollup only reflects visible members.
+- Cross-linking: dashboard "Top households" and a contact's Household field now
+  link to the household view; member and donor names link back to contacts.
+- Added to the middleware matcher. No migration.
+
 ## 0.15.0 — Contact view with giving history
 - New `/contacts/[id]` page: a contact's details (email, phone, address,
   household, tags, notes) alongside a **giving history panel** — total given,

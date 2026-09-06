@@ -24,5 +24,5 @@ export async function middleware(req: NextRequest) {
 
 // Only guard the app pages; /login, /register, /api/* and assets are excluded.
 export const config = {
-  matcher: ["/", "/dashboard", "/contacts/:path*", "/settings", "/admin"],
+  matcher: ["/", "/dashboard", "/contacts/:path*", "/households/:path*", "/settings", "/admin"],
 };

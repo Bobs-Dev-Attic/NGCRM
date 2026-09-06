@@ -93,7 +93,18 @@ export default function ContactPage() {
                     .filter(Boolean)
                     .join(" · ") || null}
                 />
-                <Row label="Household" value={c.household} />
+                <div style={styles.row}>
+                  <dt style={styles.dt}>Household</dt>
+                  <dd style={styles.dd}>
+                    {c.household_id ? (
+                      <Link href={`/households/${c.household_id}`} style={styles.link}>
+                        {c.household || "Household"}
+                      </Link>
+                    ) : (
+                      <span style={styles.muted}>—</span>
+                    )}
+                  </dd>
+                </div>
                 <Row label="Source" value={c.source} />
                 <Row label="Added" value={new Date(c.created_at).toLocaleDateString()} />
               </dl>
@@ -189,6 +200,7 @@ const styles: Record<string, React.CSSProperties> = {
   row: { display: "flex", gap: 12, fontSize: 13.5 },
   dt: { width: 92, flexShrink: 0, color: "var(--muted)", margin: 0 },
   dd: { margin: 0 },
+  link: { color: "var(--accent)", textDecoration: "none", fontWeight: 500 },
   tags: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 14 },
   tag: {
     fontSize: 12,

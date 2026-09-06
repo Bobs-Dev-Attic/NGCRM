@@ -30,10 +30,10 @@ export async function GET(req: Request) {
         SELECT count(*)::int AS households FROM households
       `) as { households: number }[];
       const topHouseholds = (await sql`
-        SELECT h.name, count(c.id)::int AS members
+        SELECT h.id, h.name, count(c.id)::int AS members
         FROM households h LEFT JOIN contacts c ON c.household_id = h.id
         GROUP BY h.id, h.name ORDER BY members DESC, h.name LIMIT 6
-      `) as { name: string | null; members: number }[];
+      `) as { id: number; name: string | null; members: number }[];
 
       const [don] = (await sql`
         SELECT coalesce(sum(amount), 0)::float AS total,
