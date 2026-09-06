@@ -23,6 +23,7 @@ type Payload = {
   giving: Giving;
   donations: Donation[];
   campaigns: Campaign[];
+  role: string;
 };
 
 const usd = (n: number) =>
@@ -102,6 +103,7 @@ export default function HouseholdPage() {
 
   const h = data?.household;
   const name = h ? h.name || "Household" : "";
+  const canRecord = data?.role === "admin" || data?.role === "staff";
 
   return (
     <main style={styles.main}>
@@ -134,7 +136,7 @@ export default function HouseholdPage() {
                 <Stat label="Last gift" value={fmtDate(data.giving.last_gift)} />
               </div>
 
-              {data.members.length > 0 && (
+              {canRecord && data.members.length > 0 && (
                 <form onSubmit={recordGift} style={styles.form}>
                   <div style={styles.formRow}>
                     <label style={{ ...styles.field, flex: 2 }}>
