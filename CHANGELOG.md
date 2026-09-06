@@ -7,6 +7,16 @@ exact Git commit (on Vercel deploys).
 This project uses loose semantic versioning while pre-1.0: minor bumps for
 features, patch bumps for fixes.
 
+## 0.20.0 — Edit campaign details
+- The campaign page has an **Edit** button (admin/staff only) opening a modal to
+  change the campaign's **name, goal amount, event date, and status**
+  (draft/active/closed); the progress bar and stats refresh in place on save.
+- `PATCH /api/campaigns/[id]` applies it — **admin/staff only** (volunteers get
+  403), org-scoped under RLS, with server-side validation (name required, goal
+  non-negative, status from the allowed set). New `requireStaff` guard in
+  `lib/access.ts`. The campaign GET now returns the caller's role so the button
+  shows only when allowed. No migration.
+
 ## 0.19.0 — Campaign detail page with goal progress
 - New `/campaigns/[id]` page: a **goal progress bar** (raised vs. goal, % and
   amount remaining), stats (gifts, donors, average, last gift), top donors, and

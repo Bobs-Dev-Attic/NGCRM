@@ -15,7 +15,15 @@ type Campaign = {
 type Progress = { raised: number; gifts: number; donors: number; average: number; last_gift: string | null };
 type TopDonor = { contact_id: number; name: string; total: number; gifts: number };
 type Donation = { id: number; amount: number; donated_at: string; contact_id: number; donor: string };
-type Payload = { campaign: Campaign; progress: Progress; topDonors: TopDonor[]; donations: Donation[] };
+type Payload = {
+  campaign: Campaign;
+  progress: Progress;
+  topDonors: TopDonor[];
+  donations: Donation[];
+  role: string;
+};
+
+const STATUSES = ["draft", "active", "closed"];
 
 const usd = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
@@ -29,7 +37,16 @@ export default function CampaignPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  // Edit modal state.
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState("");
+  const [goalInput, setGoalInput] = useState("");
+  const [eventDate, setEventDate] = useState("");
+  const [status, setStatus] = useState("draft");
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const load = () =>
     fetch(`/api/campaigns/${params.id}`)
       .then(async (r) => {
         const body = await r.json();
@@ -38,9 +55,54 @@ export default function CampaignPage() {
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"))
       .finally(() => setLoading(false));
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
 
+  function openEdit() {
+    if (!data) return;
+    setName(data.campaign.name);
+    setGoalInput(data.campaign.goal_amount != null ? String(data.campaign.goal_amount) : "");
+    setEventDate(data.campaign.event_date ? data.campaign.event_date.slice(0, 10) : "");
+    setStatus(data.campaign.status);
+    setEditError(null);
+    setEditing(true);
+  }
+
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    setEditError(null);
+    if (!name.trim()) {
+      setEditError("Name is required.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const r = await fetch(`/api/campaigns/${params.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          goal_amount: goalInput === "" ? null : Number(goalInput),
+          event_date: eventDate || null,
+          status,
+        }),
+      });
+      const body = await r.json();
+      if (!r.ok) throw new Error(body?.error || "Failed to save");
+      setEditing(false);
+      await load();
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const cp = data?.campaign;
+  const canEdit = data?.role === "admin" || data?.role === "staff";
   const goal = cp?.goal_amount ?? 0;
   const raised = data?.progress.raised ?? 0;
   const pct = goal > 0 ? Math.min(100, (raised / goal) * 100) : null;
@@ -54,12 +116,82 @@ export default function CampaignPage() {
             ← Dashboard
           </Link>
           {cp && (
-            <h1 style={styles.title}>
-              {cp.name} <span style={styles.status}>{cp.status}</span>
-            </h1>
+            <div style={styles.titleRow}>
+              <h1 style={styles.title}>
+                {cp.name} <span style={styles.status}>{cp.status}</span>
+              </h1>
+              {canEdit && (
+                <button type="button" onClick={openEdit} style={styles.editBtn}>
+                  Edit
+                </button>
+              )}
+            </div>
           )}
           {cp?.event_date && <div style={styles.sub}>Event {fmtDate(cp.event_date)}</div>}
         </header>
+
+        {editing && cp && (
+          <div style={styles.overlay} onClick={() => !saving && setEditing(false)}>
+            <form style={styles.modal} onClick={(e) => e.stopPropagation()} onSubmit={saveEdit}>
+              <div style={styles.modalTitle}>Edit campaign</div>
+              <label style={styles.field}>
+                <span style={styles.fieldLabel}>Name</span>
+                <input value={name} onChange={(e) => setName(e.target.value)} style={styles.input} />
+              </label>
+              <div style={styles.formRow}>
+                <label style={styles.field}>
+                  <span style={styles.fieldLabel}>Goal amount</span>
+                  <div style={styles.amountWrap}>
+                    <span style={styles.dollar}>$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={goalInput}
+                      onChange={(e) => setGoalInput(e.target.value)}
+                      placeholder="No goal"
+                      style={{ ...styles.input, paddingLeft: 20 }}
+                    />
+                  </div>
+                </label>
+                <label style={styles.field}>
+                  <span style={styles.fieldLabel}>Event date</span>
+                  <input
+                    type="date"
+                    value={eventDate}
+                    onChange={(e) => setEventDate(e.target.value)}
+                    style={styles.input}
+                  />
+                </label>
+              </div>
+              <label style={styles.field}>
+                <span style={styles.fieldLabel}>Status</span>
+                <select value={status} onChange={(e) => setStatus(e.target.value)} style={styles.input}>
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {editError && <div style={styles.formError}>{editError}</div>}
+              <div style={styles.modalActions}>
+                <button
+                  type="button"
+                  onClick={() => setEditing(false)}
+                  disabled={saving}
+                  style={styles.cancelBtn}
+                >
+                  Cancel
+                </button>
+                <button type="submit" disabled={saving} style={styles.saveBtn}>
+                  {saving ? "Saving…" : "Save"}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
 
         {loading ? (
           <div style={styles.card}>Loading…</div>
@@ -168,7 +300,78 @@ const styles: Record<string, React.CSSProperties> = {
   container: { width: "100%", maxWidth: 820 },
   header: { marginBottom: 18 },
   back: { fontSize: 13, color: "var(--muted)", textDecoration: "none" },
-  title: { fontSize: 26, fontWeight: 600, margin: "12px 0 0", display: "flex", alignItems: "center", gap: 10 },
+  titleRow: { display: "flex", alignItems: "center", gap: 12, marginTop: 12, flexWrap: "wrap" },
+  title: { fontSize: 26, fontWeight: 600, margin: 0, display: "flex", alignItems: "center", gap: 10 },
+  editBtn: {
+    padding: "6px 14px",
+    fontSize: 13,
+    fontWeight: 600,
+    borderRadius: 8,
+    border: "1px solid var(--border)",
+    background: "var(--card)",
+    color: "var(--fg)",
+    cursor: "pointer",
+  },
+  overlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.4)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+    zIndex: 50,
+  },
+  modal: {
+    width: "100%",
+    maxWidth: 440,
+    background: "var(--card)",
+    border: "1px solid var(--border)",
+    borderRadius: 16,
+    padding: 20,
+    boxShadow: "var(--shadow)",
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  },
+  modalTitle: { fontSize: 16, fontWeight: 600 },
+  formRow: { display: "flex", gap: 10 },
+  field: { display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 0 },
+  fieldLabel: { fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.04em" },
+  amountWrap: { position: "relative", display: "flex", alignItems: "center" },
+  dollar: { position: "absolute", left: 9, color: "var(--muted)", fontSize: 13.5, pointerEvents: "none" },
+  input: {
+    width: "100%",
+    boxSizing: "border-box",
+    padding: "7px 9px",
+    fontSize: 13.5,
+    borderRadius: 8,
+    border: "1px solid var(--border)",
+    background: "var(--bg)",
+    color: "var(--fg)",
+  },
+  formError: { fontSize: 12.5, color: "#d9534f" },
+  modalActions: { display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 },
+  cancelBtn: {
+    padding: "8px 16px",
+    fontSize: 13.5,
+    fontWeight: 600,
+    borderRadius: 8,
+    border: "1px solid var(--border)",
+    background: "var(--card)",
+    color: "var(--fg)",
+    cursor: "pointer",
+  },
+  saveBtn: {
+    padding: "8px 16px",
+    fontSize: 13.5,
+    fontWeight: 600,
+    borderRadius: 8,
+    border: "none",
+    background: "var(--accent)",
+    color: "var(--accent-fg)",
+    cursor: "pointer",
+  },
   status: {
     fontSize: 11,
     fontWeight: 600,
