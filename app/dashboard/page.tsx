@@ -121,7 +121,9 @@ export default function DashboardPage() {
                   <ul style={styles.list}>
                     {d.recentContacts.map((c) => (
                       <li key={c.id} style={styles.li}>
-                        <span>{c.name.trim() || c.email || "—"}</span>
+                        <Link href={`/contacts/${c.id}`} style={styles.contactLink}>
+                          {c.name.trim() || c.email || "—"}
+                        </Link>
                         <span style={styles.muted}>
                           {(c.tags || []).slice(0, 2).join(", ")}
                         </span>
@@ -189,6 +191,7 @@ const styles: Record<string, React.CSSProperties> = {
   list: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 8 },
   li: { display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13.5 },
   muted: { color: "var(--muted)", flexShrink: 0 },
+  contactLink: { color: "var(--accent)", textDecoration: "none", fontWeight: 500 },
   error: {
     padding: "12px 16px",
     borderRadius: 12,
