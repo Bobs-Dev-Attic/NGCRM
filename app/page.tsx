@@ -47,6 +47,7 @@ const EXAMPLES = [
   "Import these contacts: Maria Chang, maria@example.org; David Chang, david@example.org",
   "Find possible duplicate contacts",
   "Find contacts who might be related",
+  "Record a $250 gift from Maria Chang and show our top donors",
 ];
 
 export default function Home() {
@@ -161,11 +162,11 @@ export default function Home() {
         </div>
 
         <header style={styles.header}>
-          <div style={styles.logoRow}>
-            <Logo size={40} />
+          <Logo size={44} />
+          <div>
+            <div style={styles.logo}>Next-Gen CRM</div>
+            <h1 style={styles.prompt}>What do you need to get done today?</h1>
           </div>
-          <div style={styles.logo}>Next-Gen CRM</div>
-          <h1 style={styles.prompt}>What do you need to get done today?</h1>
         </header>
 
         {!keyConfigured && (
@@ -355,14 +356,13 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: "center",
   },
   bannerLink: { color: "var(--accent)", textDecoration: "none", fontWeight: 600 },
-  header: { textAlign: "center", marginBottom: 28 },
-  logoRow: { display: "flex", justifyContent: "center", marginBottom: 14 },
+  header: { display: "flex", alignItems: "center", gap: 16, marginBottom: 28 },
   logo: {
     fontSize: 13,
     letterSpacing: "0.14em",
     textTransform: "uppercase",
     color: "var(--muted)",
-    marginBottom: 18,
+    marginBottom: 6,
   },
   prompt: { fontSize: 30, fontWeight: 600, margin: 0, lineHeight: 1.2 },
   form: {

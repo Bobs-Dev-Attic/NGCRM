@@ -145,6 +145,8 @@ Vercel project settings. The agent route runs on the Node.js runtime.
   gated (draft → approve → send), defaults to a dry run, and only goes live via
   Resend when `RESEND_API_KEY`/`RESEND_FROM` are set and the user asks.
 - Full campaign builder (segment → draft → review → send) with email provider
-- Donations analytics and giving history per household
+- Donation tracking shipped: `record_donation`, `list_donations`,
+  `donation_summary`, and `household_giving` (per-household giving rollups),
+  feeding the dashboard's "Total raised" / "Top donors".
 - Streaming agent responses; task/goal tracking surfaced in the UI
 - MCP transport so external MCP tool servers can be plugged in alongside the built-in tools
