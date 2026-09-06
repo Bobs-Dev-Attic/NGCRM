@@ -11,6 +11,7 @@ type Dashboard = {
   donations: { total: number; gifts: number; donors: number };
   topDonors: { name: string; total: number }[];
   campaigns: { status: string; n: number }[];
+  campaignList: { id: number; name: string; status: string; goal: number | null; raised: number }[];
   drafts: number;
   recentContacts: { id: number; name: string; email: string | null; tags: string[]; created_at: string }[];
 };
@@ -116,6 +117,36 @@ export default function DashboardPage() {
               </section>
 
               <section style={styles.card}>
+                <div style={styles.cardTitle}>Campaigns</div>
+                {d.campaignList.length === 0 ? (
+                  <div style={styles.empty}>No campaigns yet.</div>
+                ) : (
+                  <ul style={styles.list}>
+                    {d.campaignList.map((c) => {
+                      const pct = c.goal && c.goal > 0 ? Math.min(100, (c.raised / c.goal) * 100) : null;
+                      return (
+                        <li key={c.id} style={styles.campaignItem}>
+                          <div style={styles.li}>
+                            <Link href={`/campaigns/${c.id}`} style={styles.contactLink}>
+                              {c.name}
+                            </Link>
+                            <span style={styles.muted}>
+                              {c.goal && c.goal > 0 ? `${usd(c.raised)} / ${usd(c.goal)}` : usd(c.raised)}
+                            </span>
+                          </div>
+                          {pct !== null && (
+                            <span style={styles.campaignTrack}>
+                              <span style={{ ...styles.barFill, width: `${pct}%` }} />
+                            </span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </section>
+
+              <section style={styles.card}>
                 <div style={styles.cardTitle}>Recent contacts</div>
                 {d.recentContacts.length === 0 ? (
                   <div style={styles.empty}>No contacts yet.</div>
@@ -194,6 +225,16 @@ const styles: Record<string, React.CSSProperties> = {
   li: { display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13.5 },
   muted: { color: "var(--muted)", flexShrink: 0 },
   contactLink: { color: "var(--accent)", textDecoration: "none", fontWeight: 500 },
+  campaignItem: { display: "flex", flexDirection: "column", gap: 6 },
+  campaignTrack: {
+    display: "block",
+    width: "100%",
+    height: 6,
+    background: "var(--bg)",
+    borderRadius: 999,
+    overflow: "hidden",
+    border: "1px solid var(--border)",
+  },
   error: {
     padding: "12px 16px",
     borderRadius: 12,

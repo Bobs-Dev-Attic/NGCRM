@@ -54,6 +54,14 @@ export async function GET(req: Request) {
       const [{ drafts }] = (await sql`
         SELECT count(*)::int AS drafts FROM campaign_drafts
       `) as { drafts: number }[];
+      const campaignList = (await sql`
+        SELECT c.id, c.name, c.status, c.goal_amount::float AS goal,
+               coalesce(sum(d.amount), 0)::float AS raised
+        FROM campaigns c LEFT JOIN donations d ON d.campaign_id = c.id
+        GROUP BY c.id
+        ORDER BY coalesce(c.event_date, c.created_at::date) DESC, c.name
+        LIMIT 8
+      `) as { id: number; name: string; status: string; goal: number | null; raised: number }[];
 
       const recentContacts = (await sql`
         SELECT id, coalesce(first_name,'') || ' ' || coalesce(last_name,'') AS name,
@@ -69,6 +77,7 @@ export async function GET(req: Request) {
         donations: don,
         topDonors,
         campaigns,
+        campaignList,
         drafts,
         recentContacts,
       });
