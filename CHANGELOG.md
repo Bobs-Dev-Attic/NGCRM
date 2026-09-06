@@ -7,6 +7,15 @@ exact Git commit (on Vercel deploys).
 This project uses loose semantic versioning while pre-1.0: minor bumps for
 features, patch bumps for fixes.
 
+## 0.26.0 — Custom fields for households & campaigns
+- Households and campaigns now carry the same **JSONB custom fields** as
+  contacts (`custom` column + GIN index on each). **Re-run `db:migrate`.**
+- Both pages show a custom-fields section with an Add/Edit modal (admin/staff),
+  via a new shared `CustomFields` component. Saved through
+  `PATCH /api/households/[id]` and `PATCH /api/campaigns/[id]` — the campaign
+  PATCH now does partial updates (details and/or custom independently).
+- Admin/staff-only and RLS-scoped, consistent with contact custom fields.
+
 ## 0.25.0 — Custom fields for contacts (JSONB)
 - Contacts can now carry **org-specific custom fields** (key/value), stored in a
   `contacts.custom` **JSONB** column — the "post-relational" escape hatch for

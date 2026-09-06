@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSql, runWithContext } from "@/lib/db";
 import { contextFromRequest, requireStaff } from "@/lib/access";
+import { normalizeCustom } from "@/lib/custom";
 
 const STATUSES = ["draft", "active", "closed"] as const;
 
@@ -27,7 +28,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       const sql = getSql();
 
       const [campaign] = (await sql`
-        SELECT id, name, event_date, goal_amount::float AS goal_amount, status, created_at
+        SELECT id, name, event_date, goal_amount::float AS goal_amount, status, custom, created_at
         FROM campaigns WHERE id = ${id}
       `) as {
         id: number;
@@ -35,6 +36,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         event_date: string | null;
         goal_amount: number | null;
         status: string;
+        custom: Record<string, string>;
         created_at: string;
       }[];
       if (!campaign) {
@@ -97,53 +99,71 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "Invalid campaign id." }, { status: 400 });
   }
 
-  let body: { name?: unknown; goal_amount?: unknown; event_date?: unknown; status?: unknown };
+  let body: { name?: unknown; goal_amount?: unknown; event_date?: unknown; status?: unknown; custom?: unknown };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const name = typeof body.name === "string" ? body.name.trim() : "";
-  if (!name) return NextResponse.json({ error: "Name is required." }, { status: 400 });
+  // Two independent updates: campaign details (triggered by `name`) and/or
+  // custom fields (triggered by a `custom` key). The details modal sends the
+  // former; the custom-fields editor sends only the latter.
+  const hasDetails = body.name !== undefined;
+  const hasCustom = "custom" in body;
+  if (!hasDetails && !hasCustom) {
+    return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
+  }
 
+  let name = "";
   let goal: number | null = null;
-  if (body.goal_amount !== null && body.goal_amount !== undefined && body.goal_amount !== "") {
-    goal = Number(body.goal_amount);
-    if (!Number.isFinite(goal) || goal < 0) {
-      return NextResponse.json({ error: "Goal must be a non-negative number." }, { status: 400 });
+  let eventDate: string | null = null;
+  let status = "";
+  if (hasDetails) {
+    name = typeof body.name === "string" ? body.name.trim() : "";
+    if (!name) return NextResponse.json({ error: "Name is required." }, { status: 400 });
+    if (body.goal_amount !== null && body.goal_amount !== undefined && body.goal_amount !== "") {
+      goal = Number(body.goal_amount);
+      if (!Number.isFinite(goal) || goal < 0) {
+        return NextResponse.json({ error: "Goal must be a non-negative number." }, { status: 400 });
+      }
+    }
+    eventDate = typeof body.event_date === "string" && body.event_date.trim() ? body.event_date.trim() : null;
+    status = typeof body.status === "string" ? body.status.trim() : "";
+    if (!STATUSES.includes(status as (typeof STATUSES)[number])) {
+      return NextResponse.json({ error: `Status must be one of: ${STATUSES.join(", ")}.` }, { status: 400 });
     }
   }
-
-  const eventDate =
-    typeof body.event_date === "string" && body.event_date.trim() ? body.event_date.trim() : null;
-
-  const status = typeof body.status === "string" ? body.status.trim() : "";
-  if (!STATUSES.includes(status as (typeof STATUSES)[number])) {
-    return NextResponse.json({ error: `Status must be one of: ${STATUSES.join(", ")}.` }, { status: 400 });
-  }
+  const custom = hasCustom ? normalizeCustom(body.custom) : null;
 
   return runWithContext(ctx, async () => {
     try {
       const sql = getSql();
-      const [row] = (await sql`
-        UPDATE campaigns
-        SET name = ${name},
-            goal_amount = ${goal},
-            event_date = ${eventDate}::date,
-            status = ${status}
-        WHERE id = ${id}
-        RETURNING id, name, event_date, goal_amount::float AS goal_amount, status, created_at
+      if (hasDetails) {
+        const [row] = (await sql`
+          UPDATE campaigns
+          SET name = ${name}, goal_amount = ${goal}, event_date = ${eventDate}::date, status = ${status}
+          WHERE id = ${id}
+        `) as unknown as { count: number }[];
+        void row;
+      }
+      if (custom !== null) {
+        await sql`UPDATE campaigns SET custom = ${JSON.stringify(custom)}::jsonb WHERE id = ${id}`;
+      }
+      const [fresh] = (await sql`
+        SELECT id, name, event_date, goal_amount::float AS goal_amount, status, custom, created_at
+        FROM campaigns WHERE id = ${id}
       `) as {
         id: number;
         name: string;
         event_date: string | null;
         goal_amount: number | null;
         status: string;
+        custom: Record<string, string>;
         created_at: string;
       }[];
-      if (!row) return NextResponse.json({ error: "Campaign not found." }, { status: 404 });
-      return NextResponse.json({ campaign: row });
+      if (!fresh) return NextResponse.json({ error: "Campaign not found." }, { status: 404 });
+      return NextResponse.json({ campaign: fresh });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to update campaign.";
       return NextResponse.json({ error: message }, { status: 500 });

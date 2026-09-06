@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { CustomFields } from "@/components/CustomFields";
 
 type Campaign = {
   id: number;
@@ -10,6 +11,7 @@ type Campaign = {
   event_date: string | null;
   goal_amount: number | null;
   status: string;
+  custom: Record<string, string>;
   created_at: string;
 };
 type Progress = { raised: number; gifts: number; donors: number; average: number; last_gift: string | null };
@@ -103,6 +105,17 @@ export default function CampaignPage() {
 
   const cp = data?.campaign;
   const canEdit = data?.role === "admin" || data?.role === "staff";
+
+  async function saveCustom(custom: Record<string, string>) {
+    const r = await fetch(`/api/campaigns/${params.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ custom }),
+    });
+    const body = await r.json();
+    if (!r.ok) throw new Error(body?.error || "Failed to save");
+    await load();
+  }
   const goal = cp?.goal_amount ?? 0;
   const raised = data?.progress.raised ?? 0;
   const pct = goal > 0 ? Math.min(100, (raised / goal) * 100) : null;
@@ -226,6 +239,10 @@ export default function CampaignPage() {
                 <Stat label="Average" value={usd(data.progress.average)} />
                 <Stat label="Last gift" value={fmtDate(data.progress.last_gift)} />
               </div>
+            </section>
+
+            <section style={{ ...styles.card, marginBottom: 14 }}>
+              <CustomFields fields={cp.custom || {}} canEdit={canEdit} onSave={saveCustom} />
             </section>
 
             <div style={styles.grid}>

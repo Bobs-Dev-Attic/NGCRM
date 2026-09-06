@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSql, runWithContext } from "@/lib/db";
 import { contextFromRequest, requireStaff } from "@/lib/access";
+import { normalizeCustom } from "@/lib/custom";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,8 +26,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       const sql = getSql();
 
       const [household] = (await sql`
-        SELECT id, name, created_at FROM households WHERE id = ${id}
-      `) as { id: number; name: string | null; created_at: string }[];
+        SELECT id, name, custom, created_at FROM households WHERE id = ${id}
+      `) as { id: number; name: string | null; custom: Record<string, string>; created_at: string }[];
       if (!household) {
         return NextResponse.json({ error: "Household not found." }, { status: 404 });
       }
@@ -162,6 +163,44 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ recorded: row }, { status: 201 });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to record gift.";
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
+  });
+}
+
+/**
+ * Update a household's custom (JSONB) fields. Admin/staff only (volunteers get
+ * 403), org-scoped via RLS. The provided object replaces the whole custom map.
+ */
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const guard = await requireStaff(req);
+  if (guard === 401) return NextResponse.json({ error: "Please sign in." }, { status: 401 });
+  if (guard === 403) return NextResponse.json({ error: "Admins and staff only." }, { status: 403 });
+  const ctx = guard;
+
+  const id = Number((await params).id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return NextResponse.json({ error: "Invalid household id." }, { status: 400 });
+  }
+
+  let body: { custom?: unknown };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+  }
+  const custom = normalizeCustom(body.custom);
+
+  return runWithContext(ctx, async () => {
+    try {
+      const sql = getSql();
+      const [row] = (await sql`
+        UPDATE households SET custom = ${JSON.stringify(custom)}::jsonb WHERE id = ${id} RETURNING id
+      `) as { id: number }[];
+      if (!row) return NextResponse.json({ error: "Household not found." }, { status: 404 });
+      return NextResponse.json({ custom });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to update fields.";
       return NextResponse.json({ error: message }, { status: 500 });
     }
   });

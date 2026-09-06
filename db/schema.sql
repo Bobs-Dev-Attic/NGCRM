@@ -264,3 +264,10 @@ CREATE INDEX IF NOT EXISTS idx_contacts_embedding ON contacts USING hnsw (embedd
 -- index keeps containment queries fast.
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS custom JSONB NOT NULL DEFAULT '{}'::jsonb;
 CREATE INDEX IF NOT EXISTS idx_contacts_custom ON contacts USING gin (custom);
+
+-- Custom fields for households and campaigns too (same JSONB key/value model as
+-- contacts). Org-scoped by the existing RLS on each table; GIN-indexed.
+ALTER TABLE households ADD COLUMN IF NOT EXISTS custom JSONB NOT NULL DEFAULT '{}'::jsonb;
+CREATE INDEX IF NOT EXISTS idx_households_custom ON households USING gin (custom);
+ALTER TABLE campaigns  ADD COLUMN IF NOT EXISTS custom JSONB NOT NULL DEFAULT '{}'::jsonb;
+CREATE INDEX IF NOT EXISTS idx_campaigns_custom ON campaigns USING gin (custom);
