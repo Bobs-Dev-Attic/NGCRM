@@ -7,6 +7,17 @@ exact Git commit (on Vercel deploys).
 This project uses loose semantic versioning while pre-1.0: minor bumps for
 features, patch bumps for fixes.
 
+## 0.18.0 — "Record a gift" on the household page
+- The household view's combined-giving card now has the same **Record a gift**
+  form, with a **member picker** ("From") so you can log a gift for any member
+  without leaving the household; totals, member giving, and history refresh in
+  place on save.
+- `POST /api/households/[id]` records it, auth-gated and **RLS-scoped**: the
+  donor must be a visible member of that household, the campaign must be in
+  scope, org_id comes from the session, and the amount is validated
+  server-side. The household GET now returns campaigns for the dropdown.
+  No migration.
+
 ## 0.17.0 — "Record a gift" quick form
 - The contact view's giving panel now has an inline **Record a gift** form
   (amount, date, optional campaign dropdown) — log a gift without the

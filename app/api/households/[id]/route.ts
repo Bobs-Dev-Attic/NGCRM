@@ -89,9 +89,78 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         campaign: string | null;
       }[];
 
-      return NextResponse.json({ household, members, giving, donations });
+      const campaigns = (await sql`
+        SELECT id, name FROM campaigns ORDER BY coalesce(event_date, created_at::date) DESC, name LIMIT 100
+      `) as { id: number; name: string }[];
+
+      return NextResponse.json({ household, members, giving, donations, campaigns });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load household.";
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
+  });
+}
+
+/**
+ * Record a gift from a member of this household. Auth-gated and RLS-scoped: the
+ * donor must be a contact in this household that's visible to the signed-in
+ * user, and org_id is derived from the session — so a user can't log a gift
+ * against a member (or household) they can't see.
+ */
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const ctx = await contextFromRequest(req);
+  if (!ctx) return NextResponse.json({ error: "Please sign in." }, { status: 401 });
+
+  const id = Number((await params).id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return NextResponse.json({ error: "Invalid household id." }, { status: 400 });
+  }
+
+  let body: { contact_id?: unknown; amount?: unknown; campaign_id?: unknown; donated_at?: unknown };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+  }
+
+  const contactId = Number(body.contact_id);
+  if (!Number.isInteger(contactId) || contactId <= 0) {
+    return NextResponse.json({ error: "Choose which member the gift is from." }, { status: 400 });
+  }
+  const amount = Number(body.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return NextResponse.json({ error: "Enter a gift amount greater than 0." }, { status: 400 });
+  }
+  const campaignId = Number(body.campaign_id);
+  const campaign = Number.isInteger(campaignId) && campaignId > 0 ? campaignId : null;
+  const donatedAt = typeof body.donated_at === "string" && body.donated_at.trim() ? body.donated_at.trim() : null;
+
+  return runWithContext(ctx, async () => {
+    try {
+      const sql = getSql();
+
+      // The donor must be a visible member of this household (RLS + household_id).
+      const [member] = (await sql`
+        SELECT id FROM contacts WHERE id = ${contactId} AND household_id = ${id}
+      `) as { id: number }[];
+      if (!member) {
+        return NextResponse.json({ error: "That contact isn't a member of this household." }, { status: 400 });
+      }
+
+      if (campaign !== null) {
+        const [c] = (await sql`SELECT id FROM campaigns WHERE id = ${campaign}`) as { id: number }[];
+        if (!c) return NextResponse.json({ error: "Campaign not found." }, { status: 400 });
+      }
+
+      const [row] = (await sql`
+        INSERT INTO donations (contact_id, campaign_id, amount, donated_at)
+        VALUES (${contactId}, ${campaign}, ${amount}, coalesce(${donatedAt}::date, current_date))
+        RETURNING id, contact_id, amount::float AS amount, donated_at, campaign_id
+      `) as { id: number; contact_id: number; amount: number; donated_at: string; campaign_id: number | null }[];
+
+      return NextResponse.json({ recorded: row }, { status: 201 });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to record gift.";
       return NextResponse.json({ error: message }, { status: 500 });
     }
   });

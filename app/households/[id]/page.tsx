@@ -16,7 +16,14 @@ type Donation = {
   campaign_id: number | null;
   campaign: string | null;
 };
-type Payload = { household: Household; members: Member[]; giving: Giving; donations: Donation[] };
+type Campaign = { id: number; name: string };
+type Payload = {
+  household: Household;
+  members: Member[];
+  giving: Giving;
+  donations: Donation[];
+  campaigns: Campaign[];
+};
 
 const usd = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
@@ -24,13 +31,23 @@ const usd = (n: number) =>
 const fmtDate = (s: string | null) =>
   s ? new Date(s + "T00:00:00").toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "—";
 
+const today = () => new Date().toISOString().slice(0, 10);
+
 export default function HouseholdPage() {
   const params = useParams<{ id: string }>();
   const [data, setData] = useState<Payload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  // Quick "record a gift" form state.
+  const [memberId, setMemberId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [campaignId, setCampaignId] = useState("");
+  const [date, setDate] = useState(today());
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const load = () =>
     fetch(`/api/households/${params.id}`)
       .then(async (r) => {
         const body = await r.json();
@@ -39,7 +56,49 @@ export default function HouseholdPage() {
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"))
       .finally(() => setLoading(false));
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
+
+  async function recordGift(e: React.FormEvent) {
+    e.preventDefault();
+    setFormError(null);
+    if (!memberId) {
+      setFormError("Choose which member the gift is from.");
+      return;
+    }
+    const amt = Number(amount);
+    if (!Number.isFinite(amt) || amt <= 0) {
+      setFormError("Enter a gift amount greater than 0.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const r = await fetch(`/api/households/${params.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contact_id: Number(memberId),
+          amount: amt,
+          campaign_id: campaignId ? Number(campaignId) : null,
+          donated_at: date || null,
+        }),
+      });
+      const body = await r.json();
+      if (!r.ok) throw new Error(body?.error || "Failed to record gift");
+      setMemberId("");
+      setAmount("");
+      setCampaignId("");
+      setDate(today());
+      await load(); // refresh totals + history
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Failed to record gift");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   const h = data?.household;
   const name = h ? h.name || "Household" : "";
@@ -74,6 +133,67 @@ export default function HouseholdPage() {
                 <Stat label="Largest" value={usd(data.giving.largest)} />
                 <Stat label="Last gift" value={fmtDate(data.giving.last_gift)} />
               </div>
+
+              {data.members.length > 0 && (
+                <form onSubmit={recordGift} style={styles.form}>
+                  <div style={styles.formRow}>
+                    <label style={{ ...styles.field, flex: 2 }}>
+                      <span style={styles.fieldLabel}>From</span>
+                      <select value={memberId} onChange={(e) => setMemberId(e.target.value)} style={styles.input}>
+                        <option value="">— Select member —</option>
+                        {data.members.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name.trim() || m.email || `Contact ${m.id}`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label style={styles.field}>
+                      <span style={styles.fieldLabel}>Amount</span>
+                      <div style={styles.amountWrap}>
+                        <span style={styles.dollar}>$</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          inputMode="decimal"
+                          value={amount}
+                          onChange={(e) => setAmount(e.target.value)}
+                          placeholder="100"
+                          style={{ ...styles.input, paddingLeft: 20 }}
+                        />
+                      </div>
+                    </label>
+                  </div>
+                  <div style={styles.formRow}>
+                    <label style={styles.field}>
+                      <span style={styles.fieldLabel}>Date</span>
+                      <input
+                        type="date"
+                        value={date}
+                        max={today()}
+                        onChange={(e) => setDate(e.target.value)}
+                        style={styles.input}
+                      />
+                    </label>
+                    <label style={{ ...styles.field, flex: 2 }}>
+                      <span style={styles.fieldLabel}>Campaign (optional)</span>
+                      <select value={campaignId} onChange={(e) => setCampaignId(e.target.value)} style={styles.input}>
+                        <option value="">— None —</option>
+                        {data.campaigns.map((cp) => (
+                          <option key={cp.id} value={cp.id}>
+                            {cp.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  {formError && <div style={styles.formError}>{formError}</div>}
+                  <button type="submit" disabled={saving} style={styles.button}>
+                    {saving ? "Recording…" : "Record gift"}
+                  </button>
+                </form>
+              )}
             </section>
 
             <div style={styles.grid}>
@@ -174,6 +294,43 @@ const styles: Record<string, React.CSSProperties> = {
   statValue: { fontSize: 18, fontWeight: 700, lineHeight: 1.1 },
   statLabel: { fontSize: 11, color: "var(--muted)", marginTop: 4, textTransform: "uppercase", letterSpacing: "0.04em" },
   empty: { fontSize: 13, color: "var(--muted)" },
+  form: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    padding: 14,
+    marginTop: 16,
+    borderRadius: 12,
+    border: "1px solid var(--border)",
+    background: "var(--bg)",
+  },
+  formRow: { display: "flex", gap: 10 },
+  field: { display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 0 },
+  fieldLabel: { fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.04em" },
+  amountWrap: { position: "relative", display: "flex", alignItems: "center" },
+  dollar: { position: "absolute", left: 9, color: "var(--muted)", fontSize: 13.5, pointerEvents: "none" },
+  input: {
+    width: "100%",
+    boxSizing: "border-box",
+    padding: "7px 9px",
+    fontSize: 13.5,
+    borderRadius: 8,
+    border: "1px solid var(--border)",
+    background: "var(--card)",
+    color: "var(--fg)",
+  },
+  button: {
+    alignSelf: "flex-start",
+    padding: "8px 16px",
+    fontSize: 13.5,
+    fontWeight: 600,
+    borderRadius: 8,
+    border: "none",
+    background: "var(--accent)",
+    color: "var(--accent-fg)",
+    cursor: "pointer",
+  },
+  formError: { fontSize: 12.5, color: "#d9534f" },
   list: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 8 },
   li: { display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13.5 },
   link: { color: "var(--accent)", textDecoration: "none", fontWeight: 500 },

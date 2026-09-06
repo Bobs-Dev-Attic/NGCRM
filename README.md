@@ -40,9 +40,10 @@ Agent loop  (lib/ai/agent.ts)
   recent-contacts list.
 - **Household view** — `/households/[id]` rolls up **combined giving** across a
   household (total, gifts, donors, largest, last gift) with a member list and a
-  household-wide gift history. Backed by `GET /api/households/[id]`, auth-gated
-  and RLS-scoped (members a user can't see are excluded from the totals).
-  Cross-linked with the contact view and dashboard.
+  household-wide gift history, plus a **Record a gift** form with a member
+  picker. Backed by `GET`/`POST /api/households/[id]`, auth-gated and RLS-scoped
+  (members a user can't see are excluded from the totals; a gift can only be
+  logged for a visible member). Cross-linked with the contact view and dashboard.
 - **Dashboard** — `/dashboard` gives an at-a-glance view: tiles for contacts,
   households, donors, total raised and campaigns, plus a contacts-by-tag chart
   and top-households / top-donors / recent-contacts lists. It reads
