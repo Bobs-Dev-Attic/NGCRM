@@ -17,6 +17,7 @@ type Contact = {
   tags: string[];
   source: string | null;
   notes: string | null;
+  custom: Record<string, string>;
   created_at: string;
   household_id: number | null;
   household: string | null;
@@ -68,6 +69,12 @@ export default function ContactPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Custom-fields editor state.
+  const [editingFields, setEditingFields] = useState(false);
+  const [rows, setRows] = useState<{ key: string; value: string }[]>([]);
+  const [savingFields, setSavingFields] = useState(false);
+  const [fieldsError, setFieldsError] = useState<string | null>(null);
+
   const load = () =>
     fetch(`/api/contacts/${params.id}`)
       .then(async (r) => {
@@ -115,9 +122,45 @@ export default function ContactPage() {
     }
   }
 
+  function openFieldsEditor() {
+    const custom = data?.contact.custom || {};
+    const existing = Object.entries(custom).map(([key, value]) => ({ key, value }));
+    setRows(existing.length ? existing : [{ key: "", value: "" }]);
+    setFieldsError(null);
+    setEditingFields(true);
+  }
+
+  async function saveFields(e: React.FormEvent) {
+    e.preventDefault();
+    setFieldsError(null);
+    const custom: Record<string, string> = {};
+    for (const { key, value } of rows) {
+      const k = key.trim();
+      const v = value.trim();
+      if (k && v) custom[k] = v;
+    }
+    setSavingFields(true);
+    try {
+      const r = await fetch(`/api/contacts/${params.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ custom }),
+      });
+      const body = await r.json();
+      if (!r.ok) throw new Error(body?.error || "Failed to save");
+      setEditingFields(false);
+      await load();
+    } catch (err) {
+      setFieldsError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setSavingFields(false);
+    }
+  }
+
   const c = data?.contact;
   const name = c ? `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || c.email || "Contact" : "";
   const canRecord = data?.role === "admin" || data?.role === "staff";
+  const customEntries = c ? Object.entries(c.custom || {}) : [];
 
   return (
     <main style={styles.main}>
@@ -128,6 +171,63 @@ export default function ContactPage() {
           </Link>
           {c && <h1 style={styles.title}>{name}</h1>}
         </header>
+
+        {editingFields && c && (
+          <div style={styles.overlay} onClick={() => !savingFields && setEditingFields(false)}>
+            <form style={styles.modal} onClick={(e) => e.stopPropagation()} onSubmit={saveFields}>
+              <div style={styles.modalTitle}>Custom fields</div>
+              {rows.map((r, i) => (
+                <div key={i} style={styles.fieldRow}>
+                  <input
+                    value={r.key}
+                    onChange={(e) =>
+                      setRows((rs) => rs.map((x, j) => (j === i ? { ...x, key: e.target.value } : x)))
+                    }
+                    placeholder="Field"
+                    style={{ ...styles.input, flex: 1 }}
+                  />
+                  <input
+                    value={r.value}
+                    onChange={(e) =>
+                      setRows((rs) => rs.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))
+                    }
+                    placeholder="Value"
+                    style={{ ...styles.input, flex: 1.4 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))}
+                    style={styles.removeBtn}
+                    aria-label="Remove field"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setRows((rs) => [...rs, { key: "", value: "" }])}
+                style={styles.addFieldBtn}
+              >
+                + Add field
+              </button>
+              {fieldsError && <div style={styles.formError}>{fieldsError}</div>}
+              <div style={styles.modalActions}>
+                <button
+                  type="button"
+                  onClick={() => setEditingFields(false)}
+                  disabled={savingFields}
+                  style={styles.cancelBtn}
+                >
+                  Cancel
+                </button>
+                <button type="submit" disabled={savingFields} style={styles.saveBtn}>
+                  {savingFields ? "Saving…" : "Save"}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
 
         {loading ? (
           <div style={styles.card}>Loading…</div>
@@ -171,6 +271,27 @@ export default function ContactPage() {
                 </div>
               )}
               {c.notes && <p style={styles.notes}>{c.notes}</p>}
+
+              <div style={styles.customHead}>
+                <span style={styles.customTitle}>Custom fields</span>
+                {canRecord && (
+                  <button type="button" onClick={openFieldsEditor} style={styles.editFieldsBtn}>
+                    {customEntries.length ? "Edit" : "Add"}
+                  </button>
+                )}
+              </div>
+              {customEntries.length === 0 ? (
+                <div style={styles.empty}>None yet.</div>
+              ) : (
+                <dl style={styles.dl}>
+                  {customEntries.map(([k, v]) => (
+                    <div key={k} style={styles.row}>
+                      <dt style={styles.dt}>{k}</dt>
+                      <dd style={styles.dd}>{v}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
             </section>
 
             <section style={styles.card}>
@@ -367,6 +488,94 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
   },
   formError: { fontSize: 12.5, color: "#d9534f" },
+  customHead: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    margin: "18px 0 10px",
+    borderTop: "1px solid var(--border)",
+    paddingTop: 14,
+  },
+  customTitle: { fontSize: 13, fontWeight: 600 },
+  editFieldsBtn: {
+    padding: "4px 10px",
+    fontSize: 12.5,
+    fontWeight: 600,
+    borderRadius: 8,
+    border: "1px solid var(--border)",
+    background: "var(--bg)",
+    color: "var(--fg)",
+    cursor: "pointer",
+  },
+  overlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.4)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+    zIndex: 50,
+  },
+  modal: {
+    width: "100%",
+    maxWidth: 460,
+    maxHeight: "80vh",
+    overflowY: "auto",
+    background: "var(--card)",
+    border: "1px solid var(--border)",
+    borderRadius: 16,
+    padding: 20,
+    boxShadow: "var(--shadow)",
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+  },
+  modalTitle: { fontSize: 16, fontWeight: 600 },
+  fieldRow: { display: "flex", gap: 8, alignItems: "center" },
+  removeBtn: {
+    flexShrink: 0,
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    border: "1px solid var(--border)",
+    background: "var(--bg)",
+    color: "var(--muted)",
+    cursor: "pointer",
+    fontSize: 12,
+  },
+  addFieldBtn: {
+    alignSelf: "flex-start",
+    padding: "5px 10px",
+    fontSize: 12.5,
+    fontWeight: 600,
+    borderRadius: 8,
+    border: "1px dashed var(--border)",
+    background: "transparent",
+    color: "var(--accent)",
+    cursor: "pointer",
+  },
+  modalActions: { display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 6 },
+  cancelBtn: {
+    padding: "8px 16px",
+    fontSize: 13.5,
+    fontWeight: 600,
+    borderRadius: 8,
+    border: "1px solid var(--border)",
+    background: "var(--bg)",
+    color: "var(--fg)",
+    cursor: "pointer",
+  },
+  saveBtn: {
+    padding: "8px 16px",
+    fontSize: 13.5,
+    fontWeight: 600,
+    borderRadius: 8,
+    border: "none",
+    background: "var(--accent)",
+    color: "var(--accent-fg)",
+    cursor: "pointer",
+  },
   table: { width: "100%", borderCollapse: "collapse", fontSize: 13.5 },
   th: {
     textAlign: "left",

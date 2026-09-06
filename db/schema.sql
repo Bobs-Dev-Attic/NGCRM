@@ -257,3 +257,10 @@ CREATE EXTENSION IF NOT EXISTS vector;
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS embedding vector(1536);
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS embedding_model TEXT;
 CREATE INDEX IF NOT EXISTS idx_contacts_embedding ON contacts USING hnsw (embedding vector_cosine_ops);
+
+-- Custom fields: org-specific data the fixed schema can't predict (e.g.
+-- "T-shirt size", "Board term ends"). Stored as a JSONB object of string keys
+-- to string values on each contact. RLS on contacts already scopes it; a GIN
+-- index keeps containment queries fast.
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS custom JSONB NOT NULL DEFAULT '{}'::jsonb;
+CREATE INDEX IF NOT EXISTS idx_contacts_custom ON contacts USING gin (custom);

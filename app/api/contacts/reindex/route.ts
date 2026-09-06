@@ -47,7 +47,7 @@ export async function POST(req: Request) {
       const sql = getSql();
 
       const pending = (await sql`
-        SELECT id, first_name, last_name, email, city, state, tags, notes
+        SELECT id, first_name, last_name, email, city, state, tags, notes, custom
         FROM contacts
         WHERE ${reembedAll} OR embedding IS NULL OR embedding_model IS DISTINCT FROM ${embed.model}
         ORDER BY id
@@ -61,6 +61,7 @@ export async function POST(req: Request) {
         state: string | null;
         tags: string[] | null;
         notes: string | null;
+        custom: unknown;
       }[];
 
       if (pending.length > 0) {

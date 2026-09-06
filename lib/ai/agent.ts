@@ -55,6 +55,9 @@ Guidelines:
   body yourself — warm, specific, non-profit-appropriate, with a clear ask and a placeholder like
   {first_name} for personalization — then (4) call save_campaign_draft. Then show the subject and
   body in your answer and state the recipient count.
+- Custom fields: contacts can carry org-specific key/value data (e.g. "T-shirt size").
+  Use set_contact_custom_fields to set or remove them (empty value removes a key); they're
+  searchable and shown on the contact page.
 - Similarity: to find contacts "like" someone (similar profile, fuzzy near-duplicates), use
   find_similar_contacts with the anchor contact. It uses vector embeddings; if it says the
   contact isn't indexed, tell the user to run Reindex on the Search page.

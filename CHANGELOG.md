@@ -7,6 +7,19 @@ exact Git commit (on Vercel deploys).
 This project uses loose semantic versioning while pre-1.0: minor bumps for
 features, patch bumps for fixes.
 
+## 0.25.0 — Custom fields for contacts (JSONB)
+- Contacts can now carry **org-specific custom fields** (key/value), stored in a
+  `contacts.custom` **JSONB** column — the "post-relational" escape hatch for
+  data the fixed schema can't predict. **Re-run `db:migrate`** (adds the column +
+  a GIN index).
+- Contact page shows custom fields in Details, with an **Add/Edit** modal
+  (admin/staff) — a key/value editor. Saved via `PATCH /api/contacts/[id]`
+  (admin/staff, RLS-scoped, values coerced to trimmed strings, capped).
+- Agent: `add_contact` accepts a `custom` object; new tool
+  `set_contact_custom_fields` merges/removes fields on an existing contact.
+- Custom values are folded into the contact's embedding text, so semantic search
+  finds them (re-embedded on edit; Reindex backfills).
+
 ## 0.24.0 — Giving-over-time chart
 - The dashboard gains a **"Giving over time"** card: a 12-month column chart of
   monthly donation totals (empty months filled in), with the window total and

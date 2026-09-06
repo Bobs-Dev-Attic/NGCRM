@@ -8,6 +8,8 @@
  * rather than storing a mismatched vector.
  */
 
+import { customText } from "@/lib/custom";
+
 export const EMBEDDING_DIM = 1536;
 export const DEFAULT_EMBED_MODEL = "text-embedding-3-small";
 
@@ -80,6 +82,7 @@ export function contactEmbedText(c: {
   state?: string | null;
   tags?: string[] | null;
   notes?: string | null;
+  custom?: unknown;
 }): string {
   const parts = [
     [c.first_name, c.last_name].filter(Boolean).join(" "),
@@ -87,6 +90,7 @@ export function contactEmbedText(c: {
     [c.city, c.state].filter(Boolean).join(", "),
     (c.tags || []).join(", "),
     c.notes || "",
+    customText(c.custom),
   ].filter((s) => s && s.trim());
   return parts.join(". ").trim() || "(no details)";
 }
