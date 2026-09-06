@@ -7,6 +7,15 @@ exact Git commit (on Vercel deploys).
 This project uses loose semantic versioning while pre-1.0: minor bumps for
 features, patch bumps for fixes.
 
+## 0.29.0 — Dedupe on import
+- CSV import now matches incoming rows to existing contacts by **email** and
+  offers a duplicate-handling mode: **Update existing** (fill blank fields +
+  union tags — default), **Skip existing**, or **Always create**.
+- Within-file duplicate emails are collapsed (last row wins). The result reports
+  added / updated / skipped counts. Updated contacts are re-embedded so search
+  stays current. Email match is case-insensitive; rows without an email always
+  insert. No migration.
+
 ## 0.28.0 — CSV import
 - New `/import` page (admin/staff): upload a CSV, auto-map its columns to contact
   fields (with a manual override + a preview), then import. Round-trips the CSV

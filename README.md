@@ -66,7 +66,7 @@ Agent loop  (lib/ai/agent.ts)
 - **Dashboard** — `/dashboard` gives an at-a-glance view: tiles for contacts,
   a **giving-over-time** column chart (last 12 months), **CSV/Excel export** of
   contacts and donations (RLS-scoped), **CSV import** of contacts (`/import`,
-  column-mapping, admin/staff),
+  column-mapping, email dedupe with update/skip/create modes, admin/staff),
   households, donors, total raised and campaigns, plus a contacts-by-tag chart
   and top-households / top-donors / recent-contacts lists. It reads
   `GET /api/dashboard`, which is auth-gated and **RLS-scoped**, so each user

@@ -29,8 +29,9 @@ export default function ImportPage() {
   const [fileName, setFileName] = useState("");
   const [parseError, setParseError] = useState<string | null>(null);
 
+  const [mode, setMode] = useState<"update" | "skip" | "create">("update");
   const [importing, setImporting] = useState(false);
-  const [result, setResult] = useState<{ imported: number; skipped: number } | null>(null);
+  const [result, setResult] = useState<{ imported: number; updated: number; skipped: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [role, setRole] = useState<string | null>(null);
@@ -98,11 +99,11 @@ export default function ImportPage() {
       const res = await fetch("/api/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contacts, embed: embeddingConfig(loadSettings()) }),
+        body: JSON.stringify({ contacts, mode, embed: embeddingConfig(loadSettings()) }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error || "Import failed");
-      setResult({ imported: body.imported ?? 0, skipped: body.skipped ?? 0 });
+      setResult({ imported: body.imported ?? 0, updated: body.updated ?? 0, skipped: body.skipped ?? 0 });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Import failed");
     } finally {
@@ -184,11 +185,35 @@ export default function ImportPage() {
               </div>
             </div>
 
+            <div style={styles.card}>
+              <div style={styles.cardTitle}>Duplicates (matched by email)</div>
+              <div style={styles.modes}>
+                {[
+                  { v: "update", label: "Update existing", hint: "Fill in blank fields & merge tags on matches" },
+                  { v: "skip", label: "Skip existing", hint: "Only add contacts whose email is new" },
+                  { v: "create", label: "Always create", hint: "Insert every row (may make duplicates)" },
+                ].map((m) => (
+                  <label key={m.v} style={styles.modeRow}>
+                    <input
+                      type="radio"
+                      name="mode"
+                      checked={mode === m.v}
+                      onChange={() => setMode(m.v as typeof mode)}
+                    />
+                    <span>
+                      <span style={styles.modeLabel}>{m.label}</span>
+                      <span style={styles.modeHint}>{m.hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
             {error && <div style={styles.error}>{error}</div>}
             {result && (
               <div style={styles.success}>
-                ✓ Imported {result.imported} contact{result.imported === 1 ? "" : "s"}
-                {result.skipped > 0 && ` · skipped ${result.skipped} (no name or email)`}.{" "}
+                ✓ {result.imported} added{result.updated > 0 && ` · ${result.updated} updated`}
+                {result.skipped > 0 && ` · ${result.skipped} skipped`}.{" "}
                 <Link href="/dashboard" style={styles.successLink}>
                   View dashboard
                 </Link>
@@ -250,6 +275,10 @@ const styles: Record<string, React.CSSProperties> = {
     background: "var(--bg)",
     color: "var(--fg)",
   },
+  modes: { display: "flex", flexDirection: "column", gap: 10 },
+  modeRow: { display: "flex", alignItems: "flex-start", gap: 10, fontSize: 13.5, cursor: "pointer" },
+  modeLabel: { fontWeight: 600, display: "block" },
+  modeHint: { fontSize: 12.5, color: "var(--muted)", display: "block", marginTop: 1 },
   tableWrap: { overflowX: "auto" },
   table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
   th: {
