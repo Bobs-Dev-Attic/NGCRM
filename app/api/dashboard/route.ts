@@ -54,6 +54,15 @@ export async function GET(req: Request) {
       const [{ drafts }] = (await sql`
         SELECT count(*)::int AS drafts FROM campaign_drafts
       `) as { drafts: number }[];
+      const givingByMonth = (await sql`
+        SELECT to_char(date_trunc('month', donated_at), 'YYYY-MM') AS month,
+               sum(amount)::float AS total,
+               count(*)::int AS gifts
+        FROM donations
+        WHERE donated_at >= (date_trunc('month', current_date) - interval '11 months')
+        GROUP BY 1 ORDER BY 1
+      `) as { month: string; total: number; gifts: number }[];
+
       const campaignList = (await sql`
         SELECT c.id, c.name, c.status, c.goal_amount::float AS goal,
                coalesce(sum(d.amount), 0)::float AS raised
@@ -78,6 +87,7 @@ export async function GET(req: Request) {
         topDonors,
         campaigns,
         campaignList,
+        givingByMonth,
         drafts,
         recentContacts,
       });
