@@ -7,6 +7,16 @@ exact Git commit (on Vercel deploys).
 This project uses loose semantic versioning while pre-1.0: minor bumps for
 features, patch bumps for fixes.
 
+## 0.23.0 — Embed-on-write (contacts self-index)
+- Contacts created by the agent (`add_contact`, `import_contacts`) are now
+  embedded immediately, so they're findable by semantic search without waiting
+  for a manual Reindex. Best-effort: any embedding failure is swallowed so
+  contact creation never breaks, and Reindex still backfills anything missed.
+- The embeddings config now rides along on the agent request (client sends it;
+  carried on the request context) so tools can embed newly-created rows. Bulk
+  imports embed in batches, capped so very large imports stay responsive (the
+  remainder falls to Reindex). No migration.
+
 ## 0.22.0 — Semantic search (pgvector)
 - Contacts can now be searched by **meaning**, not just keywords. New `/search`
   page: type a description ("lapsed major donors near Chicago") and get contacts

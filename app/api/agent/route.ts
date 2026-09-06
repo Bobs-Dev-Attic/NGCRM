@@ -3,6 +3,7 @@ import { runAgent } from "@/lib/ai/agent";
 import { saveRequest } from "@/lib/history";
 import { runWithContext } from "@/lib/db";
 import { contextFromRequest } from "@/lib/access";
+import { parseEmbedConfig } from "@/lib/ai/embeddings";
 import type { ProviderCandidate, ProviderConfig } from "@/lib/ai/types";
 
 // The agent uses the Node.js runtime (SDKs + DB pooling), not Edge.
@@ -35,6 +36,7 @@ function parseCandidate(raw: unknown): ProviderCandidate {
 export async function POST(req: Request) {
   let intent = "";
   let providerInput: ProviderConfig | ProviderCandidate[] = {};
+  let embed: { baseUrl: string; apiKey: string; model: string } | undefined;
   try {
     const body = await req.json();
     intent = typeof body?.intent === "string" ? body.intent.trim() : "";
@@ -44,6 +46,8 @@ export async function POST(req: Request) {
     } else {
       providerInput = parseConfig(body?.config);
     }
+    // Optional embeddings config, so tools can embed newly-created contacts.
+    embed = parseEmbedConfig(body?.embed) ?? undefined;
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
@@ -58,6 +62,7 @@ export async function POST(req: Request) {
   if (!ctx) {
     return NextResponse.json({ error: "Please sign in." }, { status: 401 });
   }
+  if (embed) ctx.embed = embed;
 
   return runWithContext(ctx, async () => {
     try {
