@@ -64,7 +64,8 @@ Agent loop  (lib/ai/agent.ts)
   pgvector extension. New contacts added by the agent self-index (embed-on-write);
   Reindex backfills anything created before indexing was set up.
 - **Dashboard** — `/dashboard` gives an at-a-glance view: tiles for contacts,
-  a **giving-over-time** column chart (last 12 months),
+  a **giving-over-time** column chart (last 12 months), **CSV/Excel export** of
+  contacts and donations (RLS-scoped),
   households, donors, total raised and campaigns, plus a contacts-by-tag chart
   and top-households / top-donors / recent-contacts lists. It reads
   `GET /api/dashboard`, which is auth-gated and **RLS-scoped**, so each user

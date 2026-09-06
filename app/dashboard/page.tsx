@@ -168,6 +168,33 @@ export default function DashboardPage() {
                   </ul>
                 )}
               </section>
+
+              <section style={styles.card}>
+                <div style={styles.cardTitle}>Export</div>
+                <div style={styles.exportGroup}>
+                  <span style={styles.exportLabel}>Contacts</span>
+                  <div style={styles.exportBtns}>
+                    <a href="/api/export?type=contacts&format=csv" style={styles.exportBtn}>
+                      CSV
+                    </a>
+                    <a href="/api/export?type=contacts&format=xlsx" style={styles.exportBtn}>
+                      Excel
+                    </a>
+                  </div>
+                </div>
+                <div style={styles.exportGroup}>
+                  <span style={styles.exportLabel}>Donations</span>
+                  <div style={styles.exportBtns}>
+                    <a href="/api/export?type=donations&format=csv" style={styles.exportBtn}>
+                      CSV
+                    </a>
+                    <a href="/api/export?type=donations&format=xlsx" style={styles.exportBtn}>
+                      Excel
+                    </a>
+                  </div>
+                </div>
+                <div style={styles.exportNote}>Exports respect your access — only records you can see.</div>
+              </section>
             </div>
           </>
         ) : null}
@@ -289,6 +316,20 @@ const styles: Record<string, React.CSSProperties> = {
   li: { display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13.5 },
   muted: { color: "var(--muted)", flexShrink: 0 },
   contactLink: { color: "var(--accent)", textDecoration: "none", fontWeight: 500 },
+  exportGroup: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 10 },
+  exportLabel: { fontSize: 13.5 },
+  exportBtns: { display: "flex", gap: 8 },
+  exportBtn: {
+    padding: "5px 12px",
+    fontSize: 12.5,
+    fontWeight: 600,
+    borderRadius: 8,
+    border: "1px solid var(--border)",
+    background: "var(--bg)",
+    color: "var(--fg)",
+    textDecoration: "none",
+  },
+  exportNote: { fontSize: 12, color: "var(--muted)", marginTop: 4 },
   campaignItem: { display: "flex", flexDirection: "column", gap: 6 },
   campaignTrack: {
     display: "block",
