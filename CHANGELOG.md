@@ -7,6 +7,15 @@ exact Git commit (on Vercel deploys).
 This project uses loose semantic versioning while pre-1.0: minor bumps for
 features, patch bumps for fixes.
 
+## 0.21.0 — Gate donation writes to admin/staff
+- Recording a gift is now **admin/staff only**, consistent with campaign
+  editing. `POST /api/contacts/[id]` and `POST /api/households/[id]` use the
+  `requireStaff` guard (volunteers get 403); the `record_donation` agent tool
+  refuses for volunteers with a clear message.
+- The "Record a gift" forms are hidden for volunteers (the contact and
+  household GETs now return the caller's role); viewing giving history is
+  unchanged. No migration.
+
 ## 0.20.0 — Edit campaign details
 - The campaign page has an **Edit** button (admin/staff only) opening a modal to
   change the campaign's **name, goal amount, event date, and status**

@@ -36,8 +36,8 @@ Agent loop  (lib/ai/agent.ts)
   dated list of every gift with its campaign) plus an inline **Record a gift**
   form (amount, date, optional campaign). Backed by `GET`/`POST /api/contacts/[id]`,
   auth-gated and RLS-scoped (an out-of-scope contact returns 404; a gift can't be
-  logged against a record the user can't see). Reachable from the dashboard's
-  recent-contacts list.
+  logged against a record the user can't see; recording is admin/staff only,
+  volunteers get 403). Reachable from the dashboard's recent-contacts list.
 - **Household view** — `/households/[id]` rolls up **combined giving** across a
   household (total, gifts, donors, largest, last gift) with a member list and a
   household-wide gift history, plus a **Record a gift** form with a member

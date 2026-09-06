@@ -39,7 +39,13 @@ type Donation = {
 };
 
 type Campaign = { id: number; name: string };
-type Payload = { contact: Contact; giving: Giving; donations: Donation[]; campaigns: Campaign[] };
+type Payload = {
+  contact: Contact;
+  giving: Giving;
+  donations: Donation[];
+  campaigns: Campaign[];
+  role: string;
+};
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -111,6 +117,7 @@ export default function ContactPage() {
 
   const c = data?.contact;
   const name = c ? `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || c.email || "Contact" : "";
+  const canRecord = data?.role === "admin" || data?.role === "staff";
 
   return (
     <main style={styles.main}>
@@ -175,6 +182,7 @@ export default function ContactPage() {
                 <Stat label="Last gift" value={fmtDate(data.giving.last_gift)} />
               </div>
 
+              {canRecord && (
               <form onSubmit={recordGift} style={styles.form}>
                 <div style={styles.formRow}>
                   <label style={styles.field}>
@@ -220,6 +228,7 @@ export default function ContactPage() {
                   {saving ? "Recording…" : "Record gift"}
                 </button>
               </form>
+              )}
 
               {data.donations.length === 0 ? (
                 <div style={styles.empty}>

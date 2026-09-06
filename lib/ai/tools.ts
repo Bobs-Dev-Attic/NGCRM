@@ -1,4 +1,4 @@
-import { getSql } from "@/lib/db";
+import { getSql, getContext } from "@/lib/db";
 import { resendConfigured, sendEmail } from "@/lib/email";
 import type { AgentTool } from "./types";
 
@@ -947,6 +947,10 @@ export const tools: AgentTool[] = [
       required: ["amount"],
     },
     async execute(input) {
+      const role = getContext()?.role;
+      if (role === "volunteer") {
+        return { error: "Recording gifts is restricted to admins and staff. Ask an admin or staff member to log this gift." };
+      }
       const sql = getSql();
       const amount = Number(input.amount);
       if (!Number.isFinite(amount) || amount <= 0) {

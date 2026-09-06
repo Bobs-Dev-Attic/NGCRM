@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSql, runWithContext } from "@/lib/db";
-import { contextFromRequest } from "@/lib/access";
+import { contextFromRequest, requireStaff } from "@/lib/access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -93,7 +93,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         SELECT id, name FROM campaigns ORDER BY coalesce(event_date, created_at::date) DESC, name LIMIT 100
       `) as { id: number; name: string }[];
 
-      return NextResponse.json({ household, members, giving, donations, campaigns });
+      return NextResponse.json({ household, members, giving, donations, campaigns, role: ctx.role });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load household.";
       return NextResponse.json({ error: message }, { status: 500 });
@@ -102,14 +102,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 }
 
 /**
- * Record a gift from a member of this household. Auth-gated and RLS-scoped: the
- * donor must be a contact in this household that's visible to the signed-in
- * user, and org_id is derived from the session — so a user can't log a gift
- * against a member (or household) they can't see.
+ * Record a gift from a member of this household. Admin/staff only (volunteers
+ * get 403) and RLS-scoped: the donor must be a contact in this household that's
+ * visible to the signed-in user, and org_id is derived from the session.
  */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = await contextFromRequest(req);
-  if (!ctx) return NextResponse.json({ error: "Please sign in." }, { status: 401 });
+  const guard = await requireStaff(req);
+  if (guard === 401) return NextResponse.json({ error: "Please sign in." }, { status: 401 });
+  if (guard === 403) return NextResponse.json({ error: "Admins and staff only." }, { status: 403 });
+  const ctx = guard;
 
   const id = Number((await params).id);
   if (!Number.isInteger(id) || id <= 0) {
