@@ -48,7 +48,9 @@ Agent loop  (lib/ai/agent.ts)
   vs. goal, % and remaining), gift/donor/average stats, top donors, and a recent
   gifts table. Backed by `GET /api/campaigns/[id]`, auth-gated and RLS-scoped
   (progress reflects only visible giving). Linked from the dashboard's Campaigns
-  card and from campaign names in gift-history tables.
+  card and from campaign names in gift-history tables. Admins/staff can **edit**
+  the campaign (name, goal, event date, status) from the page via
+  `PATCH /api/campaigns/[id]` (volunteers get 403).
 - **Dashboard** — `/dashboard` gives an at-a-glance view: tiles for contacts,
   households, donors, total raised and campaigns, plus a contacts-by-tag chart
   and top-households / top-donors / recent-contacts lists. It reads
