@@ -7,6 +7,16 @@ exact Git commit (on Vercel deploys).
 This project uses loose semantic versioning while pre-1.0: minor bumps for
 features, patch bumps for fixes.
 
+## 0.27.0 — CSV & Excel export
+- Export **contacts** and **donations** as **CSV** or **Excel (.xlsx)** from a
+  new Export card on the dashboard.
+- `GET /api/export?type=contacts|donations&format=csv|xlsx` — auth-gated and
+  **RLS-scoped**, so a file contains only the rows the user may see (a
+  volunteer's export excludes restricted contacts and their gifts).
+- CSV is RFC-4180 with a UTF-8 BOM (Excel-friendly accents). XLSX is produced by
+  a small dependency-free writer (`lib/xlsx.ts`) — no spreadsheet library added.
+  Contacts include tags, household, notes, and flattened custom fields. No migration.
+
 ## 0.26.0 — Custom fields for households & campaigns
 - Households and campaigns now carry the same **JSONB custom fields** as
   contacts (`custom` column + GIN index on each). **Re-run `db:migrate`.**
