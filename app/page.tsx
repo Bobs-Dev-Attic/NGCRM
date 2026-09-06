@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { loadSettings, hasUsableKey, eligibleChain, recordUsage } from "@/lib/settings";
+import { loadSettings, hasUsableKey, eligibleChain, recordUsage, embeddingConfig } from "@/lib/settings";
 import { estimateCostUSD, formatUSD } from "@/lib/pricing";
 import { Logo } from "@/components/Logo";
 
@@ -120,7 +120,11 @@ export default function Home() {
       const res = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ intent: value, providers: eligibleChain(settings) }),
+        body: JSON.stringify({
+          intent: value,
+          providers: eligibleChain(settings),
+          embed: embeddingConfig(settings),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Request failed");

@@ -57,7 +57,8 @@ Agent loop  (lib/ai/agent.ts)
   `text-embedding-3-small`); admin/staff backfill with a **Reindex** button.
   The `find_similar_contacts` agent tool ("find people like this donor") uses the
   stored vectors. RLS-scoped like everything else. Requires `db:migrate` with the
-  pgvector extension.
+  pgvector extension. New contacts added by the agent self-index (embed-on-write);
+  Reindex backfills anything created before indexing was set up.
 - **Dashboard** — `/dashboard` gives an at-a-glance view: tiles for contacts,
   households, donors, total raised and campaigns, plus a contacts-by-tag chart
   and top-households / top-donors / recent-contacts lists. It reads

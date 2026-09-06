@@ -15,7 +15,13 @@ import { AsyncLocalStorage } from "node:async_hooks";
  * run unscoped — the policies treat "no identity" as a trusted server path.
  */
 
-export type RequestContext = { orgId: number | null; userId: string; role: string };
+export type RequestContext = {
+  orgId: number | null;
+  userId: string;
+  role: string;
+  /** Optional embeddings config, so tools can embed-on-write. Never used for GUCs. */
+  embed?: { baseUrl: string; apiKey: string; model: string };
+};
 
 const als = new AsyncLocalStorage<RequestContext>();
 

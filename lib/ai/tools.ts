@@ -1,5 +1,6 @@
 import { getSql, getContext } from "@/lib/db";
 import { resendConfigured, sendEmail } from "@/lib/email";
+import { embedTexts, toVectorLiteral, contactEmbedText } from "@/lib/ai/embeddings";
 import type { AgentTool } from "./types";
 
 /**
@@ -272,6 +273,50 @@ async function resolveContact(
   return { error: "No matching contact. Provide contact_id, an exact email, or a full name." };
 }
 
+/**
+ * Embed-on-write: index newly-created contacts so they're immediately findable
+ * by semantic search. Best-effort — needs an embed config in the request
+ * context (sent by the client); any failure is swallowed so contact creation
+ * never breaks, and Reindex will catch up. Capped to keep large imports snappy.
+ */
+const EMBED_ON_WRITE_CAP = 256;
+const EMBED_BATCH = 64;
+
+async function embedNewContacts(ids: number[]): Promise<void> {
+  const embed = getContext()?.embed;
+  if (!embed || ids.length === 0) return;
+  const targets = ids.slice(0, EMBED_ON_WRITE_CAP);
+  try {
+    const sql = getSql();
+    const rows = (await sql`
+      SELECT id, first_name, last_name, email, city, state, tags, notes
+      FROM contacts WHERE id = ANY(${targets}::bigint[])
+    `) as {
+      id: number;
+      first_name: string | null;
+      last_name: string | null;
+      email: string | null;
+      city: string | null;
+      state: string | null;
+      tags: string[] | null;
+      notes: string | null;
+    }[];
+    for (let i = 0; i < rows.length; i += EMBED_BATCH) {
+      const chunk = rows.slice(i, i + EMBED_BATCH);
+      const vectors = await embedTexts(chunk.map(contactEmbedText), embed);
+      for (let j = 0; j < chunk.length; j++) {
+        await sql`
+          UPDATE contacts
+          SET embedding = ${toVectorLiteral(vectors[j])}::vector, embedding_model = ${embed.model}
+          WHERE id = ${chunk[j].id}
+        `;
+      }
+    }
+  } catch {
+    /* best-effort — Reindex will index anything we couldn't */
+  }
+}
+
 export const tools: AgentTool[] = [
   {
     name: "count_contacts",
@@ -353,6 +398,7 @@ export const tools: AgentTool[] = [
            ${c.city}, ${c.state}, ${c.postal_code}, ${c.tags}, ${c.source}, ${c.notes})
         RETURNING id, first_name, last_name, email
       `;
+      await embedNewContacts([Number(row.id)]);
       return { added: row };
     },
   },
@@ -395,6 +441,7 @@ export const tools: AgentTool[] = [
         )
         RETURNING id
       `;
+      await embedNewContacts((rows as { id: number }[]).map((r) => Number(r.id)));
       return { imported: rows.length };
     },
   },
