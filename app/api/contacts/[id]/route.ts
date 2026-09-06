@@ -84,9 +84,71 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         campaign: string | null;
       }[];
 
-      return NextResponse.json({ contact, giving, donations });
+      const campaigns = (await sql`
+        SELECT id, name FROM campaigns ORDER BY coalesce(event_date, created_at::date) DESC, name LIMIT 100
+      `) as { id: number; name: string }[];
+
+      return NextResponse.json({ contact, giving, donations, campaigns });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load contact.";
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
+  });
+}
+
+/**
+ * Record a gift for this contact. Auth-gated and RLS-scoped: the insert only
+ * succeeds when the contact is visible to the signed-in user, and org_id is
+ * derived from the session GUC — a volunteer can't log a gift against a
+ * restricted contact they can't see.
+ */
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const ctx = await contextFromRequest(req);
+  if (!ctx) return NextResponse.json({ error: "Please sign in." }, { status: 401 });
+
+  const id = Number((await params).id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return NextResponse.json({ error: "Invalid contact id." }, { status: 400 });
+  }
+
+  let body: { amount?: unknown; campaign_id?: unknown; donated_at?: unknown };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+  }
+
+  const amount = Number(body.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return NextResponse.json({ error: "Enter a gift amount greater than 0." }, { status: 400 });
+  }
+  const campaignId = Number(body.campaign_id);
+  const campaign = Number.isInteger(campaignId) && campaignId > 0 ? campaignId : null;
+  const donatedAt = typeof body.donated_at === "string" && body.donated_at.trim() ? body.donated_at.trim() : null;
+
+  return runWithContext(ctx, async () => {
+    try {
+      const sql = getSql();
+
+      // Confirm the contact is visible to this user (RLS) before inserting.
+      const [exists] = (await sql`SELECT id FROM contacts WHERE id = ${id}`) as { id: number }[];
+      if (!exists) return NextResponse.json({ error: "Contact not found." }, { status: 404 });
+
+      // Validate the campaign is in scope, if one was chosen.
+      if (campaign !== null) {
+        const [c] = (await sql`SELECT id FROM campaigns WHERE id = ${campaign}`) as { id: number }[];
+        if (!c) return NextResponse.json({ error: "Campaign not found." }, { status: 400 });
+      }
+
+      const [row] = (await sql`
+        INSERT INTO donations (contact_id, campaign_id, amount, donated_at)
+        VALUES (${id}, ${campaign}, ${amount}, coalesce(${donatedAt}::date, current_date))
+        RETURNING id, amount::float AS amount, donated_at, campaign_id
+      `) as { id: number; amount: number; donated_at: string; campaign_id: number | null }[];
+
+      return NextResponse.json({ recorded: row }, { status: 201 });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to record gift.";
       return NextResponse.json({ error: message }, { status: 500 });
     }
   });

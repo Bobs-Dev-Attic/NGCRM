@@ -33,9 +33,11 @@ Agent loop  (lib/ai/agent.ts)
   `db:migrate` is idempotent — re-run it after pulling schema changes.
 - **Contact view** — `/contacts/[id]` shows a contact's details next to a
   **giving history** panel (total given, gift count, largest/last gift, and a
-  dated list of every gift with its campaign). Backed by `GET /api/contacts/[id]`,
-  auth-gated and RLS-scoped (an out-of-scope contact returns 404). Reachable from
-  the dashboard's recent-contacts list.
+  dated list of every gift with its campaign) plus an inline **Record a gift**
+  form (amount, date, optional campaign). Backed by `GET`/`POST /api/contacts/[id]`,
+  auth-gated and RLS-scoped (an out-of-scope contact returns 404; a gift can't be
+  logged against a record the user can't see). Reachable from the dashboard's
+  recent-contacts list.
 - **Household view** — `/households/[id]` rolls up **combined giving** across a
   household (total, gifts, donors, largest, last gift) with a member list and a
   household-wide gift history. Backed by `GET /api/households/[id]`, auth-gated
