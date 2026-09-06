@@ -242,7 +242,15 @@ export default function HouseholdPage() {
                               {d.donor.trim() || "—"}
                             </Link>
                           </td>
-                          <td style={styles.td}>{d.campaign || <span style={styles.muted}>—</span>}</td>
+                          <td style={styles.td}>
+                            {d.campaign_id ? (
+                              <Link href={`/campaigns/${d.campaign_id}`} style={styles.link}>
+                                {d.campaign || "Campaign"}
+                              </Link>
+                            ) : (
+                              <span style={styles.muted}>—</span>
+                            )}
+                          </td>
                           <td style={{ ...styles.td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
                             {usd(d.amount)}
                           </td>

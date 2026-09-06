@@ -44,6 +44,11 @@ Agent loop  (lib/ai/agent.ts)
   picker. Backed by `GET`/`POST /api/households/[id]`, auth-gated and RLS-scoped
   (members a user can't see are excluded from the totals; a gift can only be
   logged for a visible member). Cross-linked with the contact view and dashboard.
+- **Campaign view** — `/campaigns/[id]` shows a **goal progress bar** (raised
+  vs. goal, % and remaining), gift/donor/average stats, top donors, and a recent
+  gifts table. Backed by `GET /api/campaigns/[id]`, auth-gated and RLS-scoped
+  (progress reflects only visible giving). Linked from the dashboard's Campaigns
+  card and from campaign names in gift-history tables.
 - **Dashboard** — `/dashboard` gives an at-a-glance view: tiles for contacts,
   households, donors, total raised and campaigns, plus a contacts-by-tag chart
   and top-households / top-donors / recent-contacts lists. It reads

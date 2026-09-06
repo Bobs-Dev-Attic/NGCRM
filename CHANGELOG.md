@@ -7,6 +7,18 @@ exact Git commit (on Vercel deploys).
 This project uses loose semantic versioning while pre-1.0: minor bumps for
 features, patch bumps for fixes.
 
+## 0.19.0 — Campaign detail page with goal progress
+- New `/campaigns/[id]` page: a **goal progress bar** (raised vs. goal, % and
+  amount remaining), stats (gifts, donors, average, last gift), top donors, and
+  a recent-gifts table. Handles campaigns with no goal set gracefully.
+- `GET /api/campaigns/[id]` backs it, auth-gated and **RLS-scoped**: gifts from
+  contacts the user can't see are excluded from the raised total and lists, so
+  progress reflects only visible giving.
+- Discovery: the dashboard has a new **Campaigns** card (each with a mini
+  progress bar) linking to the detail page, and campaign names in the contact
+  and household gift-history tables now link there too.
+- Added to the middleware matcher. No migration.
+
 ## 0.18.0 — "Record a gift" on the household page
 - The household view's combined-giving card now has the same **Record a gift**
   form, with a **member picker** ("From") so you can log a gift for any member
