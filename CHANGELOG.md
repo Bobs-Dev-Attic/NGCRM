@@ -7,6 +7,20 @@ exact Git commit (on Vercel deploys).
 This project uses loose semantic versioning while pre-1.0: minor bumps for
 features, patch bumps for fixes.
 
+## 0.14.0 — Donation tracking
+- New agent tools: `record_donation` (log a gift; resolves the donor by
+  contact_id / exact email / full name, and returns candidates to
+  disambiguate rather than guessing), `list_donations`, `donation_summary`
+  (totals, top donors, by campaign, optional date range), and
+  `household_giving` (giving rolled up per household).
+- Gifts can be tied to a campaign (matched or created) and dated; the agent
+  is instructed to confirm an ambiguous donor before recording.
+- These feed the existing dashboard tiles, so real gifts now drive
+  "Total raised" / "Top donors". Uses the existing `donations` table under
+  RLS — no migration.
+- Home page: logo moved to the left, on the same row as the
+  "What do you need to get done today?" prompt.
+
 ## 0.13.0 — Contacts/households dashboard
 - New `/dashboard` page (linked from the home topbar, gated by middleware):
   at-a-glance tiles for contacts, households, donors, total raised, and

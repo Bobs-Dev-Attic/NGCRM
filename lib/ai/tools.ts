@@ -225,6 +225,53 @@ async function resolveCampaign(
   return { id: Number(created.id), name: created.name };
 }
 
+type ContactMatch = { id: number; name: string; email: string | null };
+
+/**
+ * Resolve a single contact by id, else exact email, else name (first+last or
+ * either). Returns { contact } on a unique hit, or { candidates } when a
+ * name/email is ambiguous so the agent can disambiguate with the user.
+ */
+async function resolveContact(
+  contactId: unknown,
+  name: unknown,
+  email: unknown
+): Promise<{ contact?: ContactMatch; candidates?: ContactMatch[]; error?: string }> {
+  const sql = getSql();
+  const label = "coalesce(first_name,'') || ' ' || coalesce(last_name,'')";
+  const id = toInt(contactId);
+  if (id) {
+    const rows = (await sql`
+      SELECT id, coalesce(first_name,'') || ' ' || coalesce(last_name,'') AS name, email
+      FROM contacts WHERE id = ${id}
+    `) as ContactMatch[];
+    return rows[0] ? { contact: rows[0] } : { error: `No contact with id ${id}.` };
+  }
+  const em = str(email);
+  if (em) {
+    const rows = (await sql`
+      SELECT id, coalesce(first_name,'') || ' ' || coalesce(last_name,'') AS name, email
+      FROM contacts WHERE lower(email) = lower(${em}) ORDER BY id LIMIT 10
+    `) as ContactMatch[];
+    if (rows.length === 1) return { contact: rows[0] };
+    if (rows.length > 1) return { candidates: rows };
+  }
+  const nm = str(name);
+  if (nm) {
+    const rows = (await sql`
+      SELECT id, coalesce(first_name,'') || ' ' || coalesce(last_name,'') AS name, email
+      FROM contacts
+      WHERE lower(trim(${label})) = lower(${nm})
+         OR lower(first_name) = lower(${nm})
+         OR lower(last_name) = lower(${nm})
+      ORDER BY id LIMIT 10
+    `) as ContactMatch[];
+    if (rows.length === 1) return { contact: rows[0] };
+    if (rows.length > 1) return { candidates: rows };
+  }
+  return { error: "No matching contact. Provide contact_id, an exact email, or a full name." };
+}
+
 export const tools: AgentTool[] = [
   {
     name: "count_contacts",
@@ -877,6 +924,170 @@ export const tools: AgentTool[] = [
         ORDER BY created_at DESC LIMIT 25
       `;
       return { sends: rows };
+    },
+  },
+
+  // ---- Donations ----
+
+  {
+    name: "record_donation",
+    description:
+      "Record a gift/donation from a contact. Identify the donor by contact_id, exact email, or full name. Optionally tie it to a campaign and set the date. If the donor is ambiguous, this returns candidates instead of recording — confirm which one with the user, then call again with the contact_id.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        contact_id: { type: "number", description: "Preferred: the donor's contact id." },
+        name: { type: "string", description: "Donor full name (used if no contact_id)." },
+        email: { type: "string", description: "Donor email (used if no contact_id)." },
+        amount: { type: "number", description: "Gift amount in dollars." },
+        campaign_id: { type: "number" },
+        campaign_name: { type: "string", description: "Tie the gift to this campaign (matched or created)." },
+        donated_at: { type: "string", description: "ISO date, e.g. 2026-02-14. Defaults to today." },
+      },
+      required: ["amount"],
+    },
+    async execute(input) {
+      const sql = getSql();
+      const amount = Number(input.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return { error: "amount must be a positive number of dollars." };
+      }
+      const r = await resolveContact(input.contact_id, input.name, input.email);
+      if (r.error) return { error: r.error };
+      if (r.candidates) {
+        return {
+          needs_disambiguation: true,
+          message: "Multiple contacts match. Re-call with the intended contact_id.",
+          candidates: r.candidates,
+        };
+      }
+      const contact = r.contact!;
+      let campaignId: number | null = null;
+      if (toInt(input.campaign_id) || str(input.campaign_name)) {
+        const camp = await resolveCampaign(input.campaign_id, input.campaign_name);
+        if (!camp) return { error: "Could not resolve that campaign." };
+        campaignId = camp.id;
+      }
+      const donatedAt = str(input.donated_at);
+      const [row] = await sql`
+        INSERT INTO donations (contact_id, campaign_id, amount, donated_at)
+        VALUES (
+          ${contact.id}, ${campaignId}, ${amount},
+          coalesce(${donatedAt}::date, current_date)
+        )
+        RETURNING id, contact_id, campaign_id, amount::float AS amount, donated_at
+      `;
+      return { recorded_donation: { ...row, donor: contact.name.trim() || contact.email } };
+    },
+  },
+
+  {
+    name: "list_donations",
+    description:
+      "List recent donations, most recent first. Optionally filter by contact or campaign.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        contact_id: { type: "number" },
+        campaign_id: { type: "number" },
+        limit: { type: "number", description: "Default 25, max 100." },
+      },
+    },
+    async execute(input) {
+      const sql = getSql();
+      const cid = toInt(input.contact_id);
+      const camp = toInt(input.campaign_id);
+      const limit = Math.min(Math.max(Number(input.limit) || 25, 1), 100);
+      const rows = await sql`
+        SELECT d.id,
+               coalesce(ct.first_name,'') || ' ' || coalesce(ct.last_name,'') AS donor,
+               d.contact_id, d.campaign_id, c.name AS campaign,
+               d.amount::float AS amount, d.donated_at
+        FROM donations d
+        JOIN contacts ct ON ct.id = d.contact_id
+        LEFT JOIN campaigns c ON c.id = d.campaign_id
+        WHERE (${cid}::bigint IS NULL OR d.contact_id = ${cid})
+          AND (${camp}::bigint IS NULL OR d.campaign_id = ${camp})
+        ORDER BY d.donated_at DESC, d.id DESC
+        LIMIT ${limit}
+      `;
+      return { donations: rows };
+    },
+  },
+
+  {
+    name: "donation_summary",
+    description:
+      "Summarize giving: overall total, gift count, distinct donors, top donors, and totals per campaign. Optionally scope to a date range.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        since: { type: "string", description: "ISO date; only gifts on/after this date." },
+        until: { type: "string", description: "ISO date; only gifts on/before this date." },
+      },
+    },
+    async execute(input) {
+      const sql = getSql();
+      const since = str(input.since);
+      const until = str(input.until);
+      const inRange = sql`
+        (${since}::date IS NULL OR d.donated_at >= ${since})
+        AND (${until}::date IS NULL OR d.donated_at <= ${until})
+      `;
+      const [totals] = (await sql`
+        SELECT coalesce(sum(d.amount),0)::float AS total,
+               count(*)::int AS gifts,
+               count(DISTINCT d.contact_id)::int AS donors,
+               coalesce(avg(d.amount),0)::float AS average
+        FROM donations d WHERE ${inRange}
+      `) as { total: number; gifts: number; donors: number; average: number }[];
+      const topDonors = await sql`
+        SELECT coalesce(ct.first_name,'') || ' ' || coalesce(ct.last_name,'') AS donor,
+               sum(d.amount)::float AS total, count(*)::int AS gifts
+        FROM donations d JOIN contacts ct ON ct.id = d.contact_id
+        WHERE ${inRange}
+        GROUP BY ct.id, donor ORDER BY total DESC LIMIT 10
+      `;
+      const byCampaign = await sql`
+        SELECT coalesce(c.name, '(unassigned)') AS campaign,
+               sum(d.amount)::float AS total, count(*)::int AS gifts
+        FROM donations d LEFT JOIN campaigns c ON c.id = d.campaign_id
+        WHERE ${inRange}
+        GROUP BY c.name ORDER BY total DESC LIMIT 20
+      `;
+      return { totals, top_donors: topDonors, by_campaign: byCampaign };
+    },
+  },
+
+  {
+    name: "household_giving",
+    description:
+      "Giving history rolled up by household — each household's total, gift count, and last gift date. Optionally focus on one household by id.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        household_id: { type: "number", description: "Focus on one household." },
+        limit: { type: "number", description: "Default 25, max 100." },
+      },
+    },
+    async execute(input) {
+      const sql = getSql();
+      const hid = toInt(input.household_id);
+      const limit = Math.min(Math.max(Number(input.limit) || 25, 1), 100);
+      const rows = await sql`
+        SELECT h.id AS household_id, h.name AS household,
+               count(d.id)::int AS gifts,
+               coalesce(sum(d.amount),0)::float AS total,
+               max(d.donated_at) AS last_gift
+        FROM households h
+        JOIN contacts ct ON ct.household_id = h.id
+        LEFT JOIN donations d ON d.contact_id = ct.id
+        WHERE (${hid}::bigint IS NULL OR h.id = ${hid})
+        GROUP BY h.id, h.name
+        ORDER BY total DESC, h.name
+        LIMIT ${limit}
+      `;
+      return { household_giving: rows };
     },
   },
 ];
