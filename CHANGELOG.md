@@ -7,6 +7,17 @@ exact Git commit (on Vercel deploys).
 This project uses loose semantic versioning while pre-1.0: minor bumps for
 features, patch bumps for fixes.
 
+## 0.28.0 — CSV import
+- New `/import` page (admin/staff): upload a CSV, auto-map its columns to contact
+  fields (with a manual override + a preview), then import. Round-trips the CSV
+  export format. Linked from the dashboard's Export card.
+- `POST /api/import` bulk-inserts contacts — admin/staff only, RLS-scoped
+  (org_id from the session). Rows with no name and no email are skipped; tags
+  split on comma/semicolon/pipe. Best-effort embed-on-write when an
+  OpenAI-compatible provider is configured, so imports are searchable.
+- `lib/csv.ts`: dependency-free RFC-4180 CSV parser (quotes, embedded newlines,
+  BOM, CRLF/LF). No migration.
+
 ## 0.27.0 — CSV & Excel export
 - Export **contacts** and **donations** as **CSV** or **Excel (.xlsx)** from a
   new Export card on the dashboard.

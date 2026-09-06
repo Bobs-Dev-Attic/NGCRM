@@ -194,6 +194,9 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <div style={styles.exportNote}>Exports respect your access — only records you can see.</div>
+                <Link href="/import" style={styles.importLink}>
+                  Import contacts from CSV →
+                </Link>
               </section>
             </div>
           </>
@@ -330,6 +333,7 @@ const styles: Record<string, React.CSSProperties> = {
     textDecoration: "none",
   },
   exportNote: { fontSize: 12, color: "var(--muted)", marginTop: 4 },
+  importLink: { display: "inline-block", marginTop: 12, fontSize: 13, color: "var(--accent)", textDecoration: "none", fontWeight: 600 },
   campaignItem: { display: "flex", flexDirection: "column", gap: 6 },
   campaignTrack: {
     display: "block",

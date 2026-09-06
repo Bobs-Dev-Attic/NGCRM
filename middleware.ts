@@ -28,6 +28,7 @@ export const config = {
     "/",
     "/dashboard",
     "/search",
+    "/import",
     "/contacts/:path*",
     "/households/:path*",
     "/campaigns/:path*",
