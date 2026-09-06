@@ -51,6 +51,13 @@ Agent loop  (lib/ai/agent.ts)
   card and from campaign names in gift-history tables. Admins/staff can **edit**
   the campaign (name, goal, event date, status) from the page via
   `PATCH /api/campaigns/[id]` (volunteers get 403).
+- **Semantic search** — `/search` ranks contacts by **meaning** using pgvector
+  embeddings (e.g. "lapsed major donors near Chicago"), each with a match %.
+  Embeddings are provider-agnostic (OpenAI-compatible `/embeddings`, default
+  `text-embedding-3-small`); admin/staff backfill with a **Reindex** button.
+  The `find_similar_contacts` agent tool ("find people like this donor") uses the
+  stored vectors. RLS-scoped like everything else. Requires `db:migrate` with the
+  pgvector extension.
 - **Dashboard** — `/dashboard` gives an at-a-glance view: tiles for contacts,
   households, donors, total raised and campaigns, plus a contacts-by-tag chart
   and top-households / top-donors / recent-contacts lists. It reads

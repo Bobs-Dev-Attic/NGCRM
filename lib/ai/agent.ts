@@ -55,6 +55,9 @@ Guidelines:
   body yourself — warm, specific, non-profit-appropriate, with a clear ask and a placeholder like
   {first_name} for personalization — then (4) call save_campaign_draft. Then show the subject and
   body in your answer and state the recipient count.
+- Similarity: to find contacts "like" someone (similar profile, fuzzy near-duplicates), use
+  find_similar_contacts with the anchor contact. It uses vector embeddings; if it says the
+  contact isn't indexed, tell the user to run Reindex on the Search page.
 - Donations: to log a gift use record_donation (identify the donor by contact_id, exact email,
   or full name; if it returns candidates, ask the user which one, then re-call with contact_id).
   For giving questions use donation_summary (totals, top donors, by campaign), list_donations

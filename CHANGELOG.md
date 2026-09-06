@@ -7,6 +7,23 @@ exact Git commit (on Vercel deploys).
 This project uses loose semantic versioning while pre-1.0: minor bumps for
 features, patch bumps for fixes.
 
+## 0.22.0 — Semantic search (pgvector)
+- Contacts can now be searched by **meaning**, not just keywords. New `/search`
+  page: type a description ("lapsed major donors near Chicago") and get contacts
+  ranked by cosine similarity, each with a match %, linking to the contact view.
+- New agent tool **`find_similar_contacts`** — "find people like this donor" /
+  fuzzy near-duplicates — using stored embeddings (no key needed at query time).
+- Schema: **pgvector** extension, `contacts.embedding vector(1536)` +
+  `embedding_model`, and an HNSW cosine index. **Re-run `db:migrate`** (needs
+  pgvector, available on Neon).
+- Embeddings are provider-agnostic over the OpenAI-compatible `/embeddings`
+  endpoint (default `text-embedding-3-small`, 1536-dim). Admin/staff backfill via
+  a **Reindex** button on the search page (`POST /api/contacts/reindex`, batched).
+  The query is embedded per request via `POST /api/search`. Keys stay in the
+  browser — sent per request, never stored server-side.
+- Everything is RLS-scoped: similarity ranking and results only include contacts
+  the signed-in user may see.
+
 ## 0.21.0 — Gate donation writes to admin/staff
 - Recording a gift is now **admin/staff only**, consistent with campaign
   editing. `POST /api/contacts/[id]` and `POST /api/households/[id]` use the

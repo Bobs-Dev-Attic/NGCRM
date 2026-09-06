@@ -246,3 +246,14 @@ ALTER TABLE campaign_sends ENABLE ROW LEVEL SECURITY;
 ALTER TABLE campaign_sends FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS campaign_sends_all ON campaign_sends;
 CREATE POLICY campaign_sends_all ON campaign_sends FOR ALL USING (app_org() IS NULL OR org_id = app_org()) WITH CHECK (app_org() IS NULL OR org_id = app_org());
+
+-- Semantic search (pgvector). Contacts carry an embedding of their profile text
+-- so we can rank by meaning ("major donors near Chicago"), not just keywords.
+-- The column is fixed at 1536 dims (OpenAI text-embedding-3-small); embedding_model
+-- records which model produced it so mismatched vectors aren't mixed. RLS on
+-- contacts already scopes every similarity query. Requires the pgvector extension
+-- (available on Neon). Backfill via the /search page's "Reindex" button.
+CREATE EXTENSION IF NOT EXISTS vector;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS embedding vector(1536);
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS embedding_model TEXT;
+CREATE INDEX IF NOT EXISTS idx_contacts_embedding ON contacts USING hnsw (embedding vector_cosine_ops);
