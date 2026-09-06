@@ -7,6 +7,17 @@ exact Git commit (on Vercel deploys).
 This project uses loose semantic versioning while pre-1.0: minor bumps for
 features, patch bumps for fixes.
 
+## 0.17.0 — "Record a gift" quick form
+- The contact view's giving panel now has an inline **Record a gift** form
+  (amount, date, optional campaign dropdown) — log a gift without the
+  assistant; totals and history refresh in place on save.
+- `POST /api/contacts/[id]` records the gift, auth-gated and **RLS-scoped**:
+  the insert only succeeds when the contact (and chosen campaign) is visible
+  to the signed-in user, and org_id comes from the session — a user can't log
+  a gift against a record they can't see. Amount is validated server-side.
+- The contact GET now returns the org's campaigns to populate the dropdown.
+  No migration.
+
 ## 0.16.0 — Household view with combined giving
 - New `/households/[id]` page: **combined giving** across the household
   (total, gift count, distinct donors, largest, last gift), a member list
